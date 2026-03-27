@@ -1,0 +1,20 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class PlayerMovementController : MonoBehaviour
+{
+    private Rigidbody rb;
+    private float moveSpeed = 1.2f;
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+    }
+    void FixedUpdate()
+    {
+        float moveHorizontal = Input.GetAxis("Vertical");
+        float moveVertical = Input.GetAxis("Horizontal");
+
+        Vector3 movement = new Vector3(-moveHorizontal , 0.0f,moveVertical);
+        rb.MovePosition(transform.position + movement * moveSpeed );}
+}

@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e0494c37c20db94e994c1fad78446de, type: 3}
+  m_Name: Database
+  m_EditorClassIdentifier: 
+  objectsData:
+  - <Name>k__BackingField: House
+    <ID>k__BackingField: 0
+    <thisBuildType>k__BackingField: 1
+    description: Increase Maximum Population by "X"
+    <Size>k__BackingField: {x: 3, y: 3}
+    <Prefab>k__BackingField: {fileID: 8488786366054859915, guid: 62d9c540cdfb0b14cb134e3d2c749a7d,
+      type: 3}
+    <resourceRequirements>k__BackingField: []
+    <buildDependencies>k__BackingField: 
+    <benefits>k__BackingField: []
+  - <Name>k__BackingField: IronMine
+    <ID>k__BackingField: 1
+    <thisBuildType>k__BackingField: 5
+    description: Yemek
+    <Size>k__BackingField: {x: 3, y: 3}
+    <Prefab>k__BackingField: {fileID: 1007105908475428244, guid: 1c50ef2413078cd4a9eaa8e22581298d,
+      type: 3}
+    <resourceRequirements>k__BackingField: []
+    <buildDependencies>k__BackingField: 
+    <benefits>k__BackingField: []

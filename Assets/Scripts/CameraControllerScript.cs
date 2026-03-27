@@ -72,6 +72,14 @@ public class CameraControllerScript : MonoBehaviour
 
     private void Update()
     {
+        if(transform.position.x != 10f || transform.position.y != 8f || transform.position.z != 0f)
+        {
+            transform.position = new Vector3(10f , 8f, 0f);
+        }
+        if(transform.rotation.x != 35f || transform.rotation.y != -100f || transform.rotation.z != -6f)
+        {
+            transform.rotation = Quaternion.Euler(30f, -100f, -6f);
+        }
 
         if (followTransform != null)
         {
