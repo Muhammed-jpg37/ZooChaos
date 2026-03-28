@@ -10,6 +10,7 @@ TagManager:
   - Enemy
   - Obstacle
   - Grid
+  - AnimalCase
   layers:
   - Default
   - TransparentFX

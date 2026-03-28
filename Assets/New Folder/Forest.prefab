@@ -11,9 +11,12 @@ GameObject:
   - component: {fileID: 6135565472541467795}
   - component: {fileID: 1522372008072785273}
   - component: {fileID: 4541216859712725642}
+  - component: {fileID: 6117848248420928781}
+  - component: {fileID: 1675103231319550250}
+  - component: {fileID: 7734955278485222619}
   m_Layer: 0
   m_Name: Forest
-  m_TagString: Building
+  m_TagString: AnimalCase
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -55,6 +58,89 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   inPreviewMode: 0
+--- !u!65 &6117848248420928781
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5332053088379346852}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 2.0250845, y: 3.452682, z: 1.8029575}
+  m_Center: {x: 0.12592459, y: 1.226341, z: -0.10479307}
+--- !u!114 &1675103231319550250
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5332053088379346852}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e81b84fba5f44f44abb082d1ba067d87, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  id: 0
+  needConfigs:
+  - minCooldown: 5
+    maxCooldown: 10
+    needIcon: {fileID: 131262619899746584, guid: eeb02b86f61290f489b797816c930fd4,
+      type: 3}
+    miniGamePrefab: {fileID: 8731329570858104612, guid: 70874c75528d8374bb87d88414bacb8d,
+      type: 3}
+  - minCooldown: 5
+    maxCooldown: 10
+    needIcon: {fileID: 1275720804787356485, guid: ff7d86f0180a1a047ad552cfc5241b08,
+      type: 3}
+    miniGamePrefab: {fileID: 8875224659169001281, guid: dcd00fdb8f77d664cb0bc8d7ca164f04,
+      type: 3}
+  - minCooldown: 5
+    maxCooldown: 10
+    needIcon: {fileID: 1085458220353855274, guid: 03048331cacd7964cbdbdc9abb531bbf,
+      type: 3}
+    miniGamePrefab: {fileID: 3388239288100123864, guid: 7cdb587f6fdd4c242a98e03bb3766263,
+      type: 3}
+  isPlayerFixing: 0
+  MiniGamePanel: {fileID: 8488786366054859915, guid: 62d9c540cdfb0b14cb134e3d2c749a7d,
+    type: 3}
+--- !u!54 &7734955278485222619
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5332053088379346852}
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 126
+  m_CollisionDetection: 0
 --- !u!1001 &8302395540195962543
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -248,7 +334,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3

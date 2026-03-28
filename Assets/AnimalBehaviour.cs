@@ -18,7 +18,7 @@ public class AnimalBehaviour : MonoBehaviour
     public int id;
     public NeedConfig[] needConfigs = new NeedConfig[3]; // Water, Food, Waste
     public bool isPlayerFixing;
-    public GameObject MiniGamePanel;
+
 
     private NeedType currentNeed = NeedType.None;
     private GameObject activeIcon;
@@ -34,8 +34,9 @@ public class AnimalBehaviour : MonoBehaviour
         if (isPlayerFixing)
         {
             currentNeed = NeedType.None;
-            if (activeIcon != null)                Destroy(activeIcon);
-            if (activeMiniGame != null)                Destroy(activeMiniGame);
+            if (activeIcon != null) Destroy(activeIcon);
+            
+       
         }
     }
 
@@ -66,23 +67,27 @@ public class AnimalBehaviour : MonoBehaviour
             activeIcon.SetActive(true);
         }
 
-        // Instantiate corresponding mini game
-        if (needConfigs[(int)need].miniGamePrefab != null)
-        {
-            activeMiniGame = Instantiate(needConfigs[(int)need].miniGamePrefab, MiniGamePanel.transform);
-        }
+        
 
         Debug.Log($"Animal {id} needs: {need}");
     }
+    private void MiniGameInstatiate(NeedType need)
+    {
+     // Instantiate corresponding mini game when player starts fixing
+        if (needConfigs[(int)need].miniGamePrefab != null)
+        {
+            activeMiniGame = Instantiate(needConfigs[(int)need].miniGamePrefab, this.transform);
+        }
+    }
+    
 
     public void FulfillNeed()
     {
         if (activeIcon != null)
             Destroy(activeIcon);
-        if (activeMiniGame != null)
-            Destroy(activeMiniGame);
+        MiniGameInstatiate(currentNeed);
         
-        currentNeed = NeedType.None;
+   
     }
 
     public NeedType GetCurrentNeed() => currentNeed;
