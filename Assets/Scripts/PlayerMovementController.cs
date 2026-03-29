@@ -18,11 +18,5 @@ public class PlayerMovementController : MonoBehaviour
         Vector3 movement = new Vector3(-moveHorizontal , 0.0f,moveVertical);
         rb.velocity = movement * moveSpeed;}
 
-    public void OnTriggerEnter(Collider other)
-    {
-        if(other.CompareTag("AnimalCase") && Input.GetKey(KeyCode.E))
-        {
-            other.GetComponent<AnimalBehaviour>().isPlayerFixing = true;
-        }
-    }
+   
 }

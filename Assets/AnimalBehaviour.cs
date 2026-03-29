@@ -1,94 +1,60 @@
-using System.Collections;
-using System.Collections.Generic;
+using Microsoft.Unity.VisualStudio.Editor;
 using UnityEngine;
+using UnityEngine.UI;
+[RequireComponent(typeof(UnityEngine.UI.Image))]
+public class AnimalBehaviour : MonoBehaviour {
+    public enum NeedType { None, Water, Urine, Food }
+    public NeedType currentNeed = NeedType.None;
 
-public class AnimalBehaviour : MonoBehaviour
-{
-    public enum NeedType { Water = 0, Food = 1, Waste = 2, None = -1 }
-
-    [System.Serializable]
-    public class NeedConfig
-    {
-        public float minCooldown;
-        public float maxCooldown;
-        public GameObject needIcon;
-        public GameObject miniGamePrefab; // Different mini game for each need
-    }
-
-    public int id;
-    public NeedConfig[] needConfigs = new NeedConfig[3]; // Water, Food, Waste
-    public bool isPlayerFixing;
-
-
-    private NeedType currentNeed = NeedType.None;
-    private GameObject activeIcon;
-    private GameObject activeMiniGame;
-
-    void Start()
-    {
-        StartCoroutine(NeedCheckCoroutine());
-    }
-
-    void Update()
-    {
-        if (isPlayerFixing)
-        {
-            currentNeed = NeedType.None;
-            if (activeIcon != null) Destroy(activeIcon);
-            
-       
-        }
-    }
-
-    private IEnumerator NeedCheckCoroutine()
-    {
-        while (true)
-        {
-            if (currentNeed == NeedType.None)
-            {
-                int randomNeed = Random.Range(0, 3);
-                float cooldown = Random.Range(needConfigs[randomNeed].minCooldown, 
-                                             needConfigs[randomNeed].maxCooldown);
-                yield return new WaitForSeconds(cooldown);
-                TriggerNeed((NeedType)randomNeed);
-            }
-            yield return null;
-        }
-    }
-
-    private void TriggerNeed(NeedType need)
-    {
-        currentNeed = need;
-        
-        // Show corresponding icon
-        if (needConfigs[(int)need].needIcon != null)
-        {
-            activeIcon = Instantiate(needConfigs[(int)need].needIcon, transform);
-            activeIcon.SetActive(true);
-        }
-
-        
-
-        Debug.Log($"Animal {id} needs: {need}");
-    }
-    private void MiniGameInstatiate(NeedType need)
-    {
-     // Instantiate corresponding mini game when player starts fixing
-        if (needConfigs[(int)need].miniGamePrefab != null)
-        {
-            activeMiniGame = Instantiate(needConfigs[(int)need].miniGamePrefab, this.transform);
-        }
-    }
+    [Header("UI References")]
     
+    public GameObject[] needIndicators; // 0: Water, 1: Urine, 2: Food
 
-    public void FulfillNeed()
-    {
-        if (activeIcon != null)
-            Destroy(activeIcon);
-        MiniGameInstatiate(currentNeed);
-        
+
+    private bool playerInRange = false;
+
+    void Start() {
    
+
+        InvokeRepeating("CheckForNeeds", 5f, 10f); // Check every 10s
     }
 
-    public NeedType GetCurrentNeed() => currentNeed;
+    void CheckForNeeds() {
+        if (currentNeed == NeedType.None) {
+            currentNeed = (NeedType)Random.Range(1, 4);
+            UpdateIcon();
+        }
+    }
+
+    void UpdateIcon() {
+            if (currentNeed != NeedType.None) {
+                needIndicators[(int)currentNeed - 1].SetActive(true);
+         
+        }
+    }
+
+    void Update() {
+        if (playerInRange && currentNeed != NeedType.None && Input.GetKeyDown(KeyCode.E)) {
+            // Tell the Manager to start the game and pass THIS animal as the target
+           MinigameManager.Instance.StartMinigame(currentNeed, this);
+        }
+        Debug.Log("Player in range: " + playerInRange + ", Current Need: " + currentNeed);
+    }
+
+    public void ResolveNeed() {
+        currentNeed = NeedType.None;
+        foreach (GameObject indicator in needIndicators) {
+            indicator.SetActive(false);
+        }
+    }
+
+    private void OnTriggerStay(Collider other) {
+        if(other.CompareTag("Player")) {
+            playerInRange = true;
+        }
+    }
+
+    private void OnTriggerExit(Collider other) {
+        if (other.CompareTag("Player")) playerInRange = false;
+    }
 }
