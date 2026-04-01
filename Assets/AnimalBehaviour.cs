@@ -22,7 +22,8 @@ public class AnimalBehaviour : MonoBehaviour {
 
     void CheckForNeeds() {
         if (currentNeed == NeedType.None) {
-            currentNeed = (NeedType)Random.Range(1, 4);
+            //currentNeed = (NeedType)Random.Range(1, 4);
+            currentNeed = NeedType.Water; 
             isNeedActive = true;
             UpdateIcon();
         }
@@ -38,7 +39,10 @@ public class AnimalBehaviour : MonoBehaviour {
     void Update() {
         if (playerInRange && currentNeed != NeedType.None && Input.GetKeyDown(KeyCode.E)) 
         {
-           MinigameManager.Instance.StartMinigame(currentNeed, this);
+           MinigameManager manager = FindObjectOfType<MinigameManager>();
+           if (manager != null) {
+               manager.StartMinigame(currentNeed, this);
+           }
         }
         //Debug.Log("Player in range: " + playerInRange + ", Current Need: " + currentNeed);
         while(isNeedActive ) {
