@@ -7,6 +7,8 @@ using UnityEngine.EventSystems;
 
 public class BuildMenuButton : MonoBehaviour
 {
+    private int gridX;
+    private int gridY;
     // Start is called before the first frame update
     void Start()
     {
@@ -27,10 +29,27 @@ public class BuildMenuButton : MonoBehaviour
     }
 
     public void GetGridPositionX(int x) {
-        Debug.Log("Button clicked at: " + x );
+        WriteGridPosition(x, gridY);
     }
     public void GetGridPositionY(int y) {
-        Debug.Log("Button clicked at: " + y);
+        WriteGridPosition(gridX, y);
+    }
+
+    private void WriteGridPosition(int x, int y) {
+        gridX = x;
+        gridY = y;
+        Debug.Log("Grid Position set to: (" + gridX + ", " + gridY + ")");
+
+        GridScript gridScript = FindObjectOfType<GridScript>();
+        if (gridScript != null) {
+            if (gridScript.IsCellEmpty(gridX, gridY)) {
+                Debug.Log("Cell is empty. You can build here.");
+            } else {
+                Debug.Log("Cell is occupied. Choose another location.");
+            }
+        } else {
+            Debug.LogError("GridScript not found in the scene.");
+        }
     }
  
 }
