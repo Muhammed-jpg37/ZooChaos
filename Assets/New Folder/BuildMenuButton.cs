@@ -1,38 +1,73 @@
 using System.Collections;
 using System.Collections.Generic;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
 public class BuildMenuButton : MonoBehaviour
 {
-    private int gridX;
-    private int gridY;
+    [SerializeField] private int gridX;
+    [SerializeField] private int gridY;
+
+    private int pendingGridX;
+    private int pendingGridY;
+    private bool hasPendingX;
+    private bool hasPendingY;
+    private Button button;
+    private RectTransform rectTransform;
+    private bool lastInteractableState = true;
+
     // Start is called before the first frame update
     void Start()
     {
-        
+        button = GetComponent<Button>();
+        rectTransform = GetComponent<RectTransform>();
     }
 
-    // Update is called once per frame
-    void Update()
+    private void FixedUpdate()
     {
-        if(!IsMouseOverUIElement()) {
-               this.gameObject.GetComponent<Button>().interactable = false;
-        } else {
-               this.gameObject.GetComponent<Button>().interactable = true;
-            }
-    }
-    private bool IsMouseOverUIElement() {
-        return EventSystem.current.IsPointerOverGameObject();
+        if (button == null)
+        {
+            return;
+        }
+
+        bool shouldBeInteractable = IsPointerOverThisButton();
+        if (shouldBeInteractable == lastInteractableState)
+        {
+            return;
+        }
+
+        button.interactable = shouldBeInteractable;
+        lastInteractableState = shouldBeInteractable;
     }
 
     public void GetGridPositionX(int x) {
-        WriteGridPosition(x, gridY);
+        pendingGridX = x;
+        hasPendingX = true;
+        TryWritePendingGridPosition();
     }
+
     public void GetGridPositionY(int y) {
-        WriteGridPosition(gridX, y);
+        pendingGridY = y;
+        hasPendingY = true;
+        TryWritePendingGridPosition();
+    }
+
+    public void SubmitConfiguredGridPosition()
+    {
+        WriteGridPosition(gridX, gridY);
+    }
+
+    private void TryWritePendingGridPosition()
+    {
+        if (!hasPendingX || !hasPendingY)
+        {
+            return;
+        }
+
+        WriteGridPosition(pendingGridX, pendingGridY);
+        hasPendingX = false;
+        hasPendingY = false;
     }
 
     private void WriteGridPosition(int x, int y) {
@@ -40,16 +75,33 @@ public class BuildMenuButton : MonoBehaviour
         gridY = y;
         Debug.Log("Grid Position set to: (" + gridX + ", " + gridY + ")");
 
-        GridScript gridScript = FindObjectOfType<GridScript>();
-        if (gridScript != null) {
-            if (gridScript.IsCellEmpty(gridX, gridY)) {
-                Debug.Log("Cell is empty. You can build here.");
-            } else {
-                Debug.Log("Cell is occupied. Choose another location.");
-            }
-        } else {
-            Debug.LogError("GridScript not found in the scene.");
+        if (BuildConstruction.instance == null) {
+            Debug.LogWarning("BuildConstruction instance is missing.");
+            return;
         }
+
+        BuildConstruction.instance.GetGridPosition(gridX, gridY);
+    }
+
+    private bool IsPointerOverThisButton()
+    {
+        if (EventSystem.current == null)
+        {
+            return false;
+        }
+
+        bool pointerOverAnyUI = EventSystem.current.IsPointerOverGameObject();
+        if (!pointerOverAnyUI)
+        {
+            return false;
+        }
+
+        if (rectTransform == null)
+        {
+            return false;
+        }
+
+        return RectTransformUtility.RectangleContainsScreenPoint(rectTransform, Input.mousePosition, null);
     }
  
 }

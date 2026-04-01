@@ -3,54 +3,149 @@ using System.Collections.Generic;
 
 public class GridScript : MonoBehaviour
 {
-    [Header("Grid Settings")]
+[Header("Grid Layout")]
     public int gridSize = 40; 
-
     public float cellSize = 1f;
-    public Color gridColor = Color.cyan;
-    private HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
-    public bool IsCellEmpty(int x, int z)
-    {
-        Vector2Int targetPos = new Vector2Int(x, z);
+    public Vector2 startCorner = new Vector2(-12.5f, -12.5f); // Bottom-Left Anchor
+    
+    [Header("Visuals")]
+    public Color gridColor = Color.green;
+    public Color occupiedCellColor = new Color(0.2f, 0.45f, 1f, 0.35f);
+    public Color validPreviewColor = new Color(0.2f, 0.9f, 0.3f, 0.35f);
+    public Color invalidPreviewColor = new Color(0.95f, 0.2f, 0.2f, 0.35f);
 
-        if (x < 0 || x >= gridSize || z < 0 || z >= gridSize)
+    // Data storage for occupied cells
+    private HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
+    private bool hasPreview;
+    private int previewX;
+    private int previewZ;
+    private int previewWidth = 1;
+    private int previewDepth = 1;
+
+    public void SetPlacementPreview(int gridX, int gridZ, int width, int depth)
+    {
+        hasPreview = true;
+        previewX = gridX;
+        previewZ = gridZ;
+        previewWidth = Mathf.Max(1, width);
+        previewDepth = Mathf.Max(1, depth);
+    }
+
+    public void ClearPlacementPreview()
+    {
+        hasPreview = false;
+    }
+    /// <summary>
+    /// Checks if a building footprint is clear.
+    /// gridX/gridZ are the local grid indices (0 to gridSize-1)
+    /// </summary>
+    public bool CanPlaceBuilding(int gridX, int gridZ, int width, int depth)
+    {
+        for (int x = 0; x < width; x++)
         {
-            Debug.Log("Click is outside grid bounds.");
-            return false; 
+            for (int z = 0; z < depth; z++)
+            {
+                int checkX = gridX + x;
+                int checkZ = gridZ + z;
+
+                // 1. Boundary Check
+                if (checkX < 0 || checkX >= gridSize || checkZ < 0 || checkZ >= gridSize)
+                    return false;
+
+                // 2. Occupancy Check
+                if (occupiedCells.Contains(new Vector2Int(checkX, checkZ)))
+                    return false;
+            }
         }
-        return !occupiedCells.Contains(targetPos);
+        return true;
     }
-    public void OccupyCell(int x, int z)
+
+    public void MarkCellsOccupied(int gridX, int gridZ, int width, int depth)
     {
-        occupiedCells.Add(new Vector2Int(x, z));
-    }
-    public void VacateCell(int x, int z)
-    {
-        occupiedCells.Remove(new Vector2Int(x, z));
+        for (int x = 0; x < width; x++)
+        {
+            for (int z = 0; z < depth; z++)
+            {
+                occupiedCells.Add(new Vector2Int(gridX + x, gridZ + z));
+            }
+        }
     }
 
     private void OnDrawGizmos()
     {
         Gizmos.color = gridColor;
-
-
-        float halfSize = (gridSize * cellSize) / 2f;
-        Vector3 origin = transform.position;
-
+        
+        // Calculate the far edges based on current size
+        float endX = startCorner.x + (gridSize * cellSize);
+        float endZ = startCorner.y + (gridSize * cellSize);
 
         for (int i = 0; i <= gridSize; i++)
         {
-            float offset = i * cellSize - halfSize;
-            
-           
-            Vector3 startX = origin + new Vector3(offset, 0, -halfSize);
-            Vector3 endX = origin + new Vector3(offset, 0, halfSize);
-            Gizmos.DrawLine(startX, endX);
+            float offset = i * cellSize;
 
-            
-            Vector3 startZ = origin + new Vector3(-halfSize, 0, offset);
-            Vector3 endZ = origin + new Vector3(halfSize, 0, offset);
-            Gizmos.DrawLine(startZ, endZ);
+            // Vertical Lines (Parallel to Z)
+            Gizmos.DrawLine(
+                new Vector3(startCorner.x + offset, 0, startCorner.y),
+                new Vector3(startCorner.x + offset, 0, endZ)
+            );
+
+            // Horizontal Lines (Parallel to X)
+            Gizmos.DrawLine(
+                new Vector3(startCorner.x, 0, startCorner.y + offset),
+                new Vector3(endX, 0, startCorner.y + offset)
+            );
+        }
+
+        if (occupiedCells != null && occupiedCells.Count > 0)
+        {
+            Gizmos.color = occupiedCellColor;
+            foreach (Vector2Int cell in occupiedCells)
+            {
+                if (cell.x < 0 || cell.x >= gridSize || cell.y < 0 || cell.y >= gridSize)
+                {
+                    continue;
+                }
+
+                Vector3 cellCenter = new Vector3(
+                    startCorner.x + (cell.x + 0.5f) * cellSize,
+                    0.01f,
+                    startCorner.y + (cell.y + 0.5f) * cellSize
+                );
+
+                Vector3 size = new Vector3(cellSize * 0.95f, 0.015f, cellSize * 0.95f);
+                Gizmos.DrawCube(cellCenter, size);
+            }
+        }
+
+        if (!hasPreview)
+        {
+            return;
+        }
+
+        bool canPlacePreview = CanPlaceBuilding(previewX, previewZ, previewWidth, previewDepth);
+        Gizmos.color = canPlacePreview ? validPreviewColor : invalidPreviewColor;
+
+        for (int x = 0; x < previewWidth; x++)
+        {
+            for (int z = 0; z < previewDepth; z++)
+            {
+                int cellX = previewX + x;
+                int cellZ = previewZ + z;
+
+                if (cellX < 0 || cellX >= gridSize || cellZ < 0 || cellZ >= gridSize)
+                {
+                    continue;
+                }
+
+                Vector3 cellCenter = new Vector3(
+                    startCorner.x + (cellX + 0.5f) * cellSize,
+                    0.02f,
+                    startCorner.y + (cellZ + 0.5f) * cellSize
+                );
+
+                Vector3 size = new Vector3(cellSize * 0.95f, 0.02f, cellSize * 0.95f);
+                Gizmos.DrawCube(cellCenter, size);
+            }
         }
     }
 }

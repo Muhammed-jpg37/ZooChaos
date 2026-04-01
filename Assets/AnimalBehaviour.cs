@@ -40,9 +40,15 @@ public class AnimalBehaviour : MonoBehaviour {
         {
            MinigameManager.Instance.StartMinigame(currentNeed, this);
         }
-        Debug.Log("Player in range: " + playerInRange + ", Current Need: " + currentNeed);
-        for(int i = 0; i < needIndicators.Length; i++) {
-            Debug.Log("Need Indicator " + i + ": " + needIndicators[i].activeSelf);
+        //Debug.Log("Player in range: " + playerInRange + ", Current Need: " + currentNeed);
+        while(isNeedActive ) {
+            animalHappiness -= Time.deltaTime * 5f; 
+            if (animalHappiness <= 0f) {
+                animalHappiness = 0f;
+                isNeedActive = false;
+             //   Debug.Log("Animal is unhappy!");
+            }
+            
         }
     }
 
