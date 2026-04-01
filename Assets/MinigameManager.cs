@@ -17,10 +17,10 @@ public class MinigameManager : MonoBehaviour
     }
 
     public void StartMinigame(AnimalBehaviour.NeedType need, AnimalBehaviour targetAnimal) {
-        int index = (int)need - 1; // Convert enum to index
+        int index = (int)need - 1; 
         if (index >= 0 && index < minigameCanvases.Length) {
             minigameCanvases[index].gameObject.SetActive(true);
-            // You can also pass the targetAnimal reference to the minigame canvas if needed
+            
             currentTargetAnimal = targetAnimal;
         }
     }
@@ -28,7 +28,7 @@ public class MinigameManager : MonoBehaviour
     public void EndMinigame() {
         if (currentTargetAnimal != null) 
         {
-            currentTargetAnimal.ResolveNeed(); // Tell the animal to reset its need
+            currentTargetAnimal.ResolveNeed(); 
         }
         currentTargetAnimal = null;
         foreach (Canvas canvas in minigameCanvases) {
