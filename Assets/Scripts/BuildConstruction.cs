@@ -70,7 +70,8 @@ public class BuildConstruction : MonoBehaviour
             return;
         }
 
-        gridScript.SetPlacementPreview(internalGridX, internalGridY, width, depth);
+        bool requiresFullRoadSide = selectedType != BuySystemManager.BuildingType.Road;
+        gridScript.SetPlacementPreview(internalGridX, internalGridY, width, depth, requiresFullRoadSide);
     }
 
     private void TryConstructBuilding() {
@@ -107,7 +108,14 @@ public class BuildConstruction : MonoBehaviour
             return;
         }
 
-        gridScript.MarkCellsOccupied(internalGridX, internalGridY, width, depth);
+        if (selectedType != BuySystemManager.BuildingType.Road &&
+            !gridScript.HasAtLeastOneFullRoadSide(internalGridX, internalGridY, width, depth)) {
+            Debug.Log("Cannot build here. Non-road buildings need at least one full side touching roads.");
+            return;
+        }
+
+        bool markAsRoad = selectedType == BuySystemManager.BuildingType.Road;
+        gridScript.MarkCellsOccupied(internalGridX, internalGridY, width, depth, markAsRoad);
 
         Vector3 spawnPosition = new Vector3(
             gridScript.startCorner.x + (internalGridX + (width * 0.5f)) * gridScript.cellSize,

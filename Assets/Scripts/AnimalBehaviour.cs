@@ -22,8 +22,9 @@ public class AnimalBehaviour : MonoBehaviour {
 
     void CheckForNeeds() {
         if (currentNeed == NeedType.None) {
-            //currentNeed = (NeedType)Random.Range(1, 4);
-            currentNeed = NeedType.Water; 
+           // currentNeed = (NeedType)Random.Range(1, 4);  // Need randomizer hardcodeladım değiştircem sakin olun
+            currentNeed = NeedType.Food;
+           
             isNeedActive = true;
             UpdateIcon();
         }

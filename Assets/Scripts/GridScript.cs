@@ -16,24 +16,28 @@ public class GridScript : MonoBehaviour
 
     // Data storage for occupied cells
     private HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
+    private HashSet<Vector2Int> roadCells = new HashSet<Vector2Int>();
     private bool hasPreview;
     private int previewX;
     private int previewZ;
     private int previewWidth = 1;
     private int previewDepth = 1;
+    private bool previewRequiresFullRoadSide;
 
-    public void SetPlacementPreview(int gridX, int gridZ, int width, int depth)
+    public void SetPlacementPreview(int gridX, int gridZ, int width, int depth, bool requiresFullRoadSide = false)
     {
         hasPreview = true;
         previewX = gridX;
         previewZ = gridZ;
         previewWidth = Mathf.Max(1, width);
         previewDepth = Mathf.Max(1, depth);
+        previewRequiresFullRoadSide = requiresFullRoadSide;
     }
 
     public void ClearPlacementPreview()
     {
         hasPreview = false;
+        previewRequiresFullRoadSide = false;
     }
     /// <summary>
     /// Checks if a building footprint is clear.
@@ -60,15 +64,63 @@ public class GridScript : MonoBehaviour
         return true;
     }
 
-    public void MarkCellsOccupied(int gridX, int gridZ, int width, int depth)
+    public void MarkCellsOccupied(int gridX, int gridZ, int width, int depth, bool markAsRoad = false)
     {
         for (int x = 0; x < width; x++)
         {
             for (int z = 0; z < depth; z++)
             {
-                occupiedCells.Add(new Vector2Int(gridX + x, gridZ + z));
+                Vector2Int cell = new Vector2Int(gridX + x, gridZ + z);
+                occupiedCells.Add(cell);
+
+                if (markAsRoad)
+                {
+                    roadCells.Add(cell);
+                }
+                else
+                {
+                    roadCells.Remove(cell);
+                }
             }
         }
+    }
+
+    public bool HasAtLeastOneFullRoadSide(int gridX, int gridZ, int width, int depth)
+    {
+        // Top side (positive Z)
+        if (IsFullRoadEdge(gridX, gridZ + depth, width, true))
+            return true;
+
+        // Bottom side (negative Z)
+        if (IsFullRoadEdge(gridX, gridZ - 1, width, true))
+            return true;
+
+        // Left side (negative X)
+        if (IsFullRoadEdge(gridX - 1, gridZ, depth, false))
+            return true;
+
+        // Right side (positive X)
+        if (IsFullRoadEdge(gridX + width, gridZ, depth, false))
+            return true;
+
+        return false;
+    }
+
+    private bool IsFullRoadEdge(int startX, int startZ, int length, bool alongX)
+    {
+        for (int i = 0; i < length; i++)
+        {
+            int cellX = alongX ? startX + i : startX;
+            int cellZ = alongX ? startZ : startZ + i;
+
+            if (cellX < 0 || cellX >= gridSize || cellZ < 0 || cellZ >= gridSize)
+                return false;
+
+            if (!roadCells.Contains(new Vector2Int(cellX, cellZ)))
+                return false;
+        }
+
+        return true;
     }
 
     private void OnDrawGizmos()
@@ -123,6 +175,10 @@ public class GridScript : MonoBehaviour
         }
 
         bool canPlacePreview = CanPlaceBuilding(previewX, previewZ, previewWidth, previewDepth);
+        if (canPlacePreview && previewRequiresFullRoadSide)
+        {
+            canPlacePreview = HasAtLeastOneFullRoadSide(previewX, previewZ, previewWidth, previewDepth);
+        }
         Gizmos.color = canPlacePreview ? validPreviewColor : invalidPreviewColor;
 
         for (int x = 0; x < previewWidth; x++)
