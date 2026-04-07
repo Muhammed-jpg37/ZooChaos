@@ -7,6 +7,7 @@ public class CustomerBehaviour : MonoBehaviour
 	{
 		Travelling,
 		Visiting,
+		Exiting,
 		Finished
 	}
 
@@ -38,6 +39,9 @@ public class CustomerBehaviour : MonoBehaviour
 	private int travelIndex;
 	private float visitTimer;
 	private Vector2Int currentRoadCell;
+	private Vector2Int entryRoadCell;
+	private Vector3 entryWorldPosition;
+	private bool hasEntryRoadCell;
 	private bool isInitialized;
 
 	private void OnEnable()
@@ -63,6 +67,9 @@ public class CustomerBehaviour : MonoBehaviour
 			case CustomerState.Visiting:
 				UpdateVisit();
 				break;
+			case CustomerState.Exiting:
+				UpdateExiting();
+				break;
 		}
 	}
 
@@ -77,6 +84,9 @@ public class CustomerBehaviour : MonoBehaviour
 			Destroy(gameObject);
 			return;
 		}
+
+		entryWorldPosition = transform.position;
+		hasEntryRoadCell = gridScript.TryGetClosestRoadCell(entryWorldPosition, out entryRoadCell);
 
 		isInitialized = true;
 		PrepareTrip();
@@ -102,7 +112,7 @@ public class CustomerBehaviour : MonoBehaviour
 
 		if (candidates.Count == 0)
 		{
-			FinishCustomer();
+			BeginExitZoo();
 			return;
 		}
 
@@ -117,15 +127,19 @@ public class CustomerBehaviour : MonoBehaviour
 			visitTargets.Add(candidates[i]);
 		}
 
-		if (!gridScript.TryGetClosestRoadCell(transform.position, out currentRoadCell))
+		if (hasEntryRoadCell)
 		{
-			FinishCustomer();
+			currentRoadCell = entryRoadCell;
+		}
+		else if (!gridScript.TryGetClosestRoadCell(transform.position, out currentRoadCell))
+		{
+			BeginExitZoo();
 			return;
 		}
 
 		if (!TryPrepareNextTravelPath())
 		{
-			FinishCustomer();
+			BeginExitZoo();
 			return;
 		}
 
@@ -138,7 +152,7 @@ public class CustomerBehaviour : MonoBehaviour
 		{
 			if (!TryPrepareNextTravelPath())
 			{
-				FinishCustomer();
+				BeginExitZoo();
 			}
 
 			return;
@@ -172,6 +186,28 @@ public class CustomerBehaviour : MonoBehaviour
 		}
 
 		CompleteVisit();
+	}
+
+	private void UpdateExiting()
+	{
+		if (travelIndex < travelPoints.Count)
+		{
+			Vector3 targetPoint = travelPoints[travelIndex];
+			transform.position = Vector3.MoveTowards(transform.position, targetPoint, moveSpeed * Time.deltaTime);
+
+			if (Vector3.Distance(transform.position, targetPoint) <= arriveDistance)
+			{
+				travelIndex++;
+			}
+
+			return;
+		}
+
+		transform.position = Vector3.MoveTowards(transform.position, entryWorldPosition, moveSpeed * Time.deltaTime);
+		if (Vector3.Distance(transform.position, entryWorldPosition) <= arriveDistance)
+		{
+			CompleteExit();
+		}
 	}
 
 	private bool TryPrepareNextTravelPath()
@@ -258,23 +294,53 @@ public class CustomerBehaviour : MonoBehaviour
 
 		if (visitTargets.Count == 0)
 		{
-			FinishCustomer();
+			BeginExitZoo();
 			return;
 		}
 
 		if (!gridScript.TryGetClosestRoadCell(transform.position, out currentRoadCell))
 		{
-			FinishCustomer();
+			BeginExitZoo();
 			return;
 		}
 
 		if (!TryPrepareNextTravelPath())
 		{
-			FinishCustomer();
+			BeginExitZoo();
 		}
 		else
 		{
 			state = CustomerState.Travelling;
+		}
+	}
+
+	private void BeginExitZoo()
+	{
+		if (state == CustomerState.Exiting || state == CustomerState.Finished)
+		{
+			return;
+		}
+
+		visitTargets.Clear();
+		activeTarget = null;
+		travelPoints.Clear();
+		travelIndex = 0;
+		state = CustomerState.Exiting;
+
+		if (!hasEntryRoadCell)
+		{
+			return;
+		}
+
+		if (!gridScript.TryGetClosestRoadCell(transform.position, out currentRoadCell))
+		{
+			return;
+		}
+
+		List<Vector2Int> roadPath = gridScript.GetRoadPath(currentRoadCell, entryRoadCell);
+		for (int i = 0; i < roadPath.Count; i++)
+		{
+			travelPoints.Add(gridScript.CellToWorldCenter(roadPath[i]));
 		}
 	}
 
@@ -349,7 +415,7 @@ public class CustomerBehaviour : MonoBehaviour
 		}
 	}
 
-	private void FinishCustomer()
+	private void CompleteExit()
 	{
 		state = CustomerState.Finished;
 		if (resourceManager != null)

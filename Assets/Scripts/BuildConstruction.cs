@@ -103,6 +103,24 @@ public class BuildConstruction : MonoBehaviour
             return;
         }
 
+        if (!BuySystemManager.instance.TryGetBuildingCost(selectedType, out int buildingCost))
+        {
+            Debug.LogWarning("No building cost configured for selected building type: " + selectedType);
+            return;
+        }
+
+        if (ResourceManager.instance == null)
+        {
+            Debug.LogWarning("ResourceManager instance is missing.");
+            return;
+        }
+
+        if (!ResourceManager.instance.CanAfford(buildingCost))
+        {
+            Debug.Log($"Cannot build {selectedType}. Required: {buildingCost}, Current money: {ResourceManager.instance.Money}");
+            return;
+        }
+
         if (!gridScript.CanPlaceBuilding(internalGridX, internalGridY, width, depth)) {
             Debug.Log("Cannot build here. The area is occupied or out of bounds.");
             return;
@@ -111,6 +129,12 @@ public class BuildConstruction : MonoBehaviour
         if (selectedType != BuySystemManager.BuildingType.Road &&
             !gridScript.HasAtLeastOneFullRoadSide(internalGridX, internalGridY, width, depth)) {
             Debug.Log("Cannot build here. Non-road buildings need at least one full side touching roads.");
+            return;
+        }
+
+        if (!ResourceManager.instance.SpendMoney(buildingCost))
+        {
+            Debug.Log($"Cannot build {selectedType}. Not enough money.");
             return;
         }
 

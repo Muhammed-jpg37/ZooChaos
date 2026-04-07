@@ -35,6 +35,7 @@ public class Fishing : MonoBehaviour
     [SerializeField] private int foodRewardAmount = 1;
     [SerializeField] private UnityEvent<int> onFoodCaught;
     [SerializeField] private UnityEvent onFoodEscaped;
+    [SerializeField] private bool disableOnFinish = true;
 
     private float barVelocity;
     private float targetVelocity;
@@ -204,6 +205,11 @@ public class Fishing : MonoBehaviour
         {
             onFoodEscaped?.Invoke();
             Debug.Log("Food escaped.");
+        }
+
+        if (disableOnFinish)
+        {
+            gameObject.SetActive(false);
         }
     }
 

@@ -13,6 +13,7 @@ public class BuySystemManager : MonoBehaviour
         public GameObject prefab;
         public int width = 1;
         public int depth = 1;
+        public int cost = 0;
     }
 
     private void Awake() {
@@ -68,6 +69,19 @@ public class BuySystemManager : MonoBehaviour
         prefab = entry.prefab;
         width = Mathf.Max(1, entry.width);
         depth = Mathf.Max(1, entry.depth);
+        return true;
+    }
+
+    public bool TryGetBuildingCost(BuildingType type, out int cost)
+    {
+        cost = 0;
+
+        if (!buildingLookup.TryGetValue(type, out BuildingEntry entry) || entry == null)
+        {
+            return false;
+        }
+
+        cost = Mathf.Max(0, entry.cost);
         return true;
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public class ResourceManager : MonoBehaviour
 {
@@ -8,6 +9,8 @@ public class ResourceManager : MonoBehaviour
 	[Header("Money")]
 	[SerializeField] private int startingMoney = 0;
 	[SerializeField] private int money;
+	[SerializeField] private TMP_Text moneyText;
+	[SerializeField] private string moneyPrefix = "$";
 
 	[Header("Customer Happiness")]
 	[SerializeField, Range(0f, 100f)] private float customerHappiness = 50f;
@@ -37,6 +40,7 @@ public class ResourceManager : MonoBehaviour
 
 		instance = this;
 		money = startingMoney;
+		RefreshMoneyUI();
 	}
 
 	private void Start()
@@ -64,6 +68,37 @@ public class ResourceManager : MonoBehaviour
 	public void AddMoney(int amount)
 	{
 		money += Mathf.Max(0, amount);
+		RefreshMoneyUI();
+	}
+
+	public bool CanAfford(int amount)
+	{
+		return money >= Mathf.Max(0, amount);
+	}
+
+	public bool SpendMoney(int amount)
+	{
+		int validAmount = Mathf.Max(0, amount);
+		if (money < validAmount)
+		{
+			return false;
+		}
+
+		money -= validAmount;
+		RefreshMoneyUI();
+		return true;
+	}
+
+	private void RefreshMoneyUI()
+	{
+		if (moneyText == null)
+		{
+			return;
+		}
+
+		moneyText.text = string.IsNullOrEmpty(moneyPrefix)
+			? money.ToString()
+			: $"{moneyPrefix}{money}";
 	}
 
 	public void AddCustomerHappiness(float amount)
