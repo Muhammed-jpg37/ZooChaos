@@ -195,11 +195,18 @@ public class Fishing : MonoBehaviour
         }
 
         isRunning = false;
+        bool endedByManager = false;
 
         if (success)
         {
             onFoodCaught?.Invoke(foodRewardAmount);
             Debug.Log($"Food caught! +{foodRewardAmount} food");
+
+            if (MinigameManager.instance != null)
+            {
+                MinigameManager.instance.EndMinigame();
+                endedByManager = true;
+            }
         }
         else
         {
@@ -207,7 +214,7 @@ public class Fishing : MonoBehaviour
             Debug.Log("Food escaped.");
         }
 
-        if (disableOnFinish)
+        if (disableOnFinish && !endedByManager)
         {
             gameObject.SetActive(false);
         }

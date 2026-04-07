@@ -31,7 +31,8 @@ public class AnimalBehaviour : MonoBehaviour
     {
         if (currentNeed == NeedType.None)
         {
-            currentNeed = NeedType.Food;
+            int randomNeed = Random.Range(1, 4); // 1 to 3
+            currentNeed = (NeedType)randomNeed;
             isNeedActive = true;
             UpdateIcon();
         }
