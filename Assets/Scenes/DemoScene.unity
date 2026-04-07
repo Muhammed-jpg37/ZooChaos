@@ -49120,6 +49120,61 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 899284741}
   m_CullTransparentMesh: 1
+--- !u!1 &901610262
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 901610264}
+  - component: {fileID: 901610263}
+  m_Layer: 0
+  m_Name: MainResourceManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &901610263
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 901610262}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 381b29be3b7fc2e439ebb42c38303b0b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  startingMoney: 1000
+  money: 0
+  customerHappiness: 50
+  minCustomerSpawnInterval: 4
+  maxCustomerSpawnInterval: 16
+  minCustomersPerSpawn: 1
+  maxCustomersPerSpawn: 3
+  maxActiveCustomers: 12
+  customerPrefab: {fileID: 131262619899746584, guid: eeb02b86f61290f489b797816c930fd4,
+    type: 3}
+  customerSpawnPoint: {fileID: 1960997092}
+--- !u!4 &901610264
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 901610262}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 132.33641, y: -2.4385977, z: 68.764305}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &902130936
 GameObject:
   m_ObjectHideFlags: 0
@@ -60118,6 +60173,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   needCheckInterval: 0
+  animalHappiness: 100
   currentNeed: 0
   needIndicators:
   - {fileID: 785428716}
@@ -100099,6 +100155,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1956192385}
   m_CullTransparentMesh: 1
+--- !u!1 &1960997091
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1960997092}
+  m_Layer: 0
+  m_Name: EntryPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 7422848464349959988, guid: 0000000000000000d000000000000000, type: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1960997092
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1960997091}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 144.52625, y: 0.88, z: 65.38}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1961025846
 GameObject:
   m_ObjectHideFlags: 0
@@ -110190,6 +110277,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   needCheckInterval: 0
+  animalHappiness: 100
   currentNeed: 0
   needIndicators:
   - {fileID: 1632378145}
@@ -111152,3 +111240,5 @@ SceneRoots:
   - {fileID: 610733251}
   - {fileID: 323560257}
   - {fileID: 1968206776}
+  - {fileID: 901610264}
+  - {fileID: 1960997092}

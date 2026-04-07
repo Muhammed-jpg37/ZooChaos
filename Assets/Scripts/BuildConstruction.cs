@@ -123,7 +123,16 @@ public class BuildConstruction : MonoBehaviour
             gridScript.startCorner.y + (internalGridY + (depth * 0.5f)) * gridScript.cellSize
         );
 
-        Instantiate(prefab, spawnPosition, Quaternion.identity);
+        GameObject spawnedBuilding = Instantiate(prefab, spawnPosition, Quaternion.identity);
+
+        BuildingInstance buildingInstance = spawnedBuilding.GetComponent<BuildingInstance>();
+        if (buildingInstance == null)
+        {
+            buildingInstance = spawnedBuilding.AddComponent<BuildingInstance>();
+        }
+
+        buildingInstance.Initialize(selectedType, new Vector2Int(internalGridX, internalGridY), width, depth);
+
         ResetPendingGridPosition();
 
         if (gridScript != null)

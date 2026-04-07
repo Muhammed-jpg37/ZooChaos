@@ -85,6 +85,148 @@ public class GridScript : MonoBehaviour
         }
     }
 
+    public List<Vector2Int> GetRoadCells()
+    {
+        return new List<Vector2Int>(roadCells);
+    }
+
+    public bool IsRoadCell(Vector2Int cell)
+    {
+        return roadCells.Contains(cell);
+    }
+
+    public bool IsWithinGrid(Vector2Int cell)
+    {
+        return cell.x >= 0 && cell.x < gridSize && cell.y >= 0 && cell.y < gridSize;
+    }
+
+    public Vector2Int WorldToCell(Vector3 worldPosition)
+    {
+        int cellX = Mathf.FloorToInt((worldPosition.x - startCorner.x) / cellSize);
+        int cellY = Mathf.FloorToInt((worldPosition.z - startCorner.y) / cellSize);
+        return new Vector2Int(cellX, cellY);
+    }
+
+    public Vector3 CellToWorldCenter(Vector2Int cell)
+    {
+        return new Vector3(
+            startCorner.x + (cell.x + 0.5f) * cellSize,
+            0f,
+            startCorner.y + (cell.y + 0.5f) * cellSize
+        );
+    }
+    public bool TryGetClosestRoadCell(Vector3 worldPosition, out Vector2Int closestCell)
+    {
+        closestCell = default;
+
+        if (roadCells == null || roadCells.Count == 0)
+        {
+            return false;
+        }
+
+        float bestDistance = float.MaxValue;
+        foreach (Vector2Int roadCell in roadCells)
+        {
+            Vector3 roadWorld = CellToWorldCenter(roadCell);
+            float distance = Vector3.Distance(worldPosition, roadWorld);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                closestCell = roadCell;
+            }
+        }
+
+        return true;
+    }
+
+    public Vector2Int GetClosestRoadCell(Vector3 worldPosition)
+    {
+        if (TryGetClosestRoadCell(worldPosition, out Vector2Int closestCell))
+        {
+            return closestCell;
+        }
+
+        return Vector2Int.zero;
+    }
+
+    public List<Vector2Int> GetRoadPath(Vector2Int start, Vector2Int end)
+    {
+        List<Vector2Int> emptyPath = new List<Vector2Int>();
+
+        if (!IsWithinGrid(start) || !IsWithinGrid(end) || !IsRoadCell(start) || !IsRoadCell(end))
+        {
+            return emptyPath;
+        }
+
+        Queue<Vector2Int> openSet = new Queue<Vector2Int>();
+        Dictionary<Vector2Int, Vector2Int> cameFrom = new Dictionary<Vector2Int, Vector2Int>();
+        HashSet<Vector2Int> visited = new HashSet<Vector2Int>();
+
+        openSet.Enqueue(start);
+        visited.Add(start);
+
+        while (openSet.Count > 0)
+        {
+            Vector2Int current = openSet.Dequeue();
+            if (current == end)
+            {
+                break;
+            }
+
+            foreach (Vector2Int neighbor in GetRoadNeighbors(current))
+            {
+                if (visited.Contains(neighbor))
+                {
+                    continue;
+                }
+
+                visited.Add(neighbor);
+                cameFrom[neighbor] = current;
+                openSet.Enqueue(neighbor);
+            }
+        }
+
+        if (!visited.Contains(end))
+        {
+            return emptyPath;
+        }
+
+        List<Vector2Int> path = new List<Vector2Int>();
+        Vector2Int currentCell = end;
+        path.Add(currentCell);
+
+        while (currentCell != start)
+        {
+            currentCell = cameFrom[currentCell];
+            path.Add(currentCell);
+        }
+
+        path.Reverse();
+        return path;
+    }
+
+    private List<Vector2Int> GetRoadNeighbors(Vector2Int cell)
+    {
+        List<Vector2Int> neighbors = new List<Vector2Int>();
+        Vector2Int[] directions =
+        {
+            Vector2Int.up,
+            Vector2Int.down,
+            Vector2Int.left,
+            Vector2Int.right
+        };
+
+        foreach (Vector2Int direction in directions)
+        {
+            Vector2Int neighbor = cell + direction;
+            if (IsWithinGrid(neighbor) && IsRoadCell(neighbor))
+            {
+                neighbors.Add(neighbor);
+            }
+        }
+
+        return neighbors;
+    }
     public bool HasAtLeastOneFullRoadSide(int gridX, int gridZ, int width, int depth)
     {
         // Top side (positive Z)
