@@ -2,7 +2,6 @@ using Microsoft.Unity.VisualStudio.Editor;
 using UnityEngine;
 using UnityEngine.UI;
 
-[RequireComponent(typeof(UnityEngine.UI.Image))]
 public class AnimalBehaviour : MonoBehaviour
 {
     [Header("Need Settings")]
