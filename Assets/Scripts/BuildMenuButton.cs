@@ -109,6 +109,9 @@ public class BuildMenuButton : MonoBehaviour
         int startY = buildConstruction.LastConstructedGridY;
         int width = buildConstruction.LastConstructedWidth;
         int depth = buildConstruction.LastConstructedDepth;
+        Color targetColor = buildConstruction.LastConstructedBuildingType == BuySystemManager.BuildingType.Road
+            ? Color.blue
+            : Color.red;
 
         if (startX < 1 || startY < 1 || width < 1 || depth < 1)
         {
@@ -132,12 +135,12 @@ public class BuildMenuButton : MonoBehaviour
 
             if (insideFootprint)
             {
-                buildButton.SetConstructedButtonColor();
+                buildButton.SetConstructedButtonColor(targetColor);
             }
         }
     }
 
-    private void SetConstructedButtonColor()
+    private void SetConstructedButtonColor(Color targetColor)
     {
         if (button == null || hasBeenConstructed)
         {
@@ -145,17 +148,17 @@ public class BuildMenuButton : MonoBehaviour
         }
 
         ColorBlock colors = button.colors;
-        colors.normalColor = Color.red;
-        colors.highlightedColor = Color.red;
-        colors.pressedColor = Color.red;
-        colors.selectedColor = Color.red;
-        colors.disabledColor = Color.red;
+        colors.normalColor = targetColor;
+        colors.highlightedColor = targetColor;
+        colors.pressedColor = targetColor;
+        colors.selectedColor = targetColor;
+        colors.disabledColor = targetColor;
         button.colors = colors;
 
         Image buttonImage = button.GetComponent<Image>();
         if (buttonImage != null)
         {
-            buttonImage.color = Color.red;
+            buttonImage.color = targetColor;
         }
 
         hasBeenConstructed = true;

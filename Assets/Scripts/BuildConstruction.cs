@@ -12,6 +12,7 @@ public class BuildConstruction : MonoBehaviour
     public int LastConstructedGridY { get; private set; } = -1;
     public int LastConstructedWidth { get; private set; }
     public int LastConstructedDepth { get; private set; }
+    public BuySystemManager.BuildingType LastConstructedBuildingType { get; private set; } = BuySystemManager.BuildingType.None;
     public static BuildConstruction instance { get; private set; }
 
     private int GridToInternalIndex(int oneBasedIndex)
@@ -44,6 +45,7 @@ public class BuildConstruction : MonoBehaviour
         LastConstructedGridY = -1;
         LastConstructedWidth = 0;
         LastConstructedDepth = 0;
+        LastConstructedBuildingType = BuySystemManager.BuildingType.None;
         UpdatePlacementPreview();
         LastConstructionSucceeded = TryConstructBuilding();
     }
@@ -196,6 +198,7 @@ public class BuildConstruction : MonoBehaviour
         LastConstructedGridY = internalGridY + 1;
         LastConstructedWidth = width;
         LastConstructedDepth = depth;
+        LastConstructedBuildingType = selectedType;
    
         ResetPendingGridPosition();
 
