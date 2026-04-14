@@ -6,9 +6,6 @@ using UnityEngine.EventSystems;
 
 public class BuildMenuButton : MonoBehaviour
 {
-    private static readonly Dictionary<Vector2Int, BuildMenuButton> buttonLookup = new Dictionary<Vector2Int, BuildMenuButton>();
-    [SerializeField] private bool debugRegistration;
-
     [SerializeField] private int gridX;
     [SerializeField] private int gridY;
 
@@ -18,29 +15,13 @@ public class BuildMenuButton : MonoBehaviour
     private bool hasPendingY;
     private Button button;
     private RectTransform rectTransform;
-    private Image image;
-    private Color defaultColor;
     private bool lastInteractableState = true;
-    private bool isOccupied;
-    private bool isRegistered;
 
-    private void OnEnable()
+    // Start is called before the first frame update
+    void Start()
     {
-        InitializeComponents();
-        RegisterButtonIfValid();
-        ApplyColorState();
-    }
-
-    private void Start()
-    {
-        InitializeComponents();
-        RegisterButtonIfValid();
-        ApplyColorState();
-    }
-
-    private void OnDisable()
-    {
-        UnregisterCurrentKey();
+        button = GetComponent<Button>();
+        rectTransform = GetComponent<RectTransform>();
     }
 
     private void FixedUpdate()
@@ -90,14 +71,9 @@ public class BuildMenuButton : MonoBehaviour
     }
 
     private void WriteGridPosition(int x, int y) {
-        UnregisterCurrentKey();
-
         gridX = x;
         gridY = y;
         Debug.Log("Grid Position set to: (" + gridX + ", " + gridY + ")");
-
-        RegisterButtonIfValid();
-        ApplyColorState();
 
         if (BuildConstruction.instance == null) {
             Debug.LogWarning("BuildConstruction instance is missing.");
@@ -105,93 +81,6 @@ public class BuildMenuButton : MonoBehaviour
         }
 
         BuildConstruction.instance.GetGridPosition(gridX, gridY);
-    }
-
-    public void SetOccupiedState(bool occupied)
-    {
-        isOccupied = occupied;
-        ApplyColorState();
-
-        if (debugRegistration)
-        {
-            Debug.Log($"[BuildMenuButton] Occupied state changed at ({gridX}, {gridY}) -> {isOccupied}", this);
-        }
-    }
-
-    public bool IsOccupied()
-    {
-        return isOccupied;
-    }
-
-    public static bool TryGetButton(int x, int y, out BuildMenuButton buildMenuButton)
-    {
-        return buttonLookup.TryGetValue(new Vector2Int(x, y), out buildMenuButton);
-    }
-
-    private void RegisterButton()
-    {
-        if (!HasValidGridCoordinate())
-        {
-            return;
-        }
-
-        Vector2Int key = new Vector2Int(gridX, gridY);
-        if (buttonLookup.ContainsKey(key))
-        {
-            buttonLookup[key] = this;
-        }
-        else
-        {
-            buttonLookup.Add(key, this);
-        }
-
-        isRegistered = true;
-
-        if (debugRegistration)
-        {
-            Debug.Log($"[BuildMenuButton] Registered button at ({gridX}, {gridY})", this);
-        }
-    }
-
-    private void ApplyColorState()
-    {
-        if (image == null)
-        {
-            return;
-        }
-
-        if (isOccupied)
-        {
-            image.color = Color.red;
-        }
-        else
-        {
-            image.color = defaultColor;
-        }
-         
-    }
-
-    private void InitializeComponents()
-    {
-        if (button == null)
-        {
-            button = GetComponent<Button>();
-        }
-
-        if (rectTransform == null)
-        {
-            rectTransform = GetComponent<RectTransform>();
-        }
-
-        if (image == null)
-        {
-            image = GetComponent<Image>();
-        }
-
-        if (image != null && defaultColor == default)
-        {
-            defaultColor = image.color;
-        }
     }
 
     private bool IsPointerOverThisButton()
@@ -213,37 +102,6 @@ public class BuildMenuButton : MonoBehaviour
         }
 
         return RectTransformUtility.RectangleContainsScreenPoint(rectTransform, Input.mousePosition, null);
-    }
-
-    private void RegisterButtonIfValid()
-    {
-        if (!HasValidGridCoordinate())
-        {
-            return;
-        }
-
-        RegisterButton();
-    }
-
-    private void UnregisterCurrentKey()
-    {
-        if (!isRegistered)
-        {
-            return;
-        }
-
-        Vector2Int key = new Vector2Int(gridX, gridY);
-        if (buttonLookup.ContainsKey(key) && buttonLookup[key] == this)
-        {
-            buttonLookup.Remove(key);
-        }
-
-        isRegistered = false;
-    }
-
-    private bool HasValidGridCoordinate()
-    {
-        return gridX > 0 && gridY > 0;
     }
  
 }

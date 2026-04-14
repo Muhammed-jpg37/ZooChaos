@@ -7,7 +7,6 @@ public class BuildConstruction : MonoBehaviour
     private int gridX = -1;
     private int gridY = -1;
     private int databaseIndex = -1;
-    [SerializeField] private bool debugMapButtonLookup;
     public static BuildConstruction instance { get; private set; }
 
     private int GridToInternalIndex(int oneBasedIndex)
@@ -171,8 +170,6 @@ public class BuildConstruction : MonoBehaviour
 
         buildingInstance.Initialize(selectedType, new Vector2Int(internalGridX, internalGridY), width, depth);
 
-        MarkMapButtonsOccupied(internalGridX, internalGridY, width, depth);
-
         if (selectedType == BuySystemManager.BuildingType.Road)
         {
             RefreshAllRoadRotations(gridScript);
@@ -281,47 +278,5 @@ public class BuildConstruction : MonoBehaviour
             Vector2Int roadCell = building.GridOrigin;
             building.transform.rotation = GetRoadRotation(gridScript, roadCell.x, roadCell.y);
         }
-    }
-
-    private void MarkMapButtonsOccupied(int gridX, int gridY, int width, int depth)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < depth; y++)
-            {
-                int buttonX = gridX + x;
-                int buttonY = gridY + y;
-
-                if (TryGetMapButtonForCell(buttonX, buttonY, out BuildMenuButton buildMenuButton))
-                {
-                    buildMenuButton.SetOccupiedState(true);
-
-                    if (debugMapButtonLookup)
-                    {
-                        Debug.Log($"[BuildConstruction] Marked map button red for grid cell ({buttonX}, {buttonY})");
-                    }
-                }
-                else if (debugMapButtonLookup)
-                {
-                    Debug.LogWarning($"[BuildConstruction] No map button found for grid cell ({buttonX}, {buttonY})");
-                }
-            }
-        }
-    }
-
-    private bool TryGetMapButtonForCell(int gridX, int gridY, out BuildMenuButton buildMenuButton)
-    {
-        // Try both coordinate systems because map UI can be authored as 1-based or 0-based.
-        if (BuildMenuButton.TryGetButton(gridX + 1, gridY + 1, out buildMenuButton))
-        {
-            return true;
-        }
-
-        if (BuildMenuButton.TryGetButton(gridX, gridY, out buildMenuButton))
-        {
-            return true;
-        }
-
-        return false;
     }
 }
