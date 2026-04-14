@@ -16,6 +16,21 @@ public class BuildMenuButton : MonoBehaviour
     private Button button;
     private RectTransform rectTransform;
     private bool lastInteractableState = true;
+    private bool hasBeenConstructed;
+    private static readonly List<BuildMenuButton> allButtons = new List<BuildMenuButton>();
+
+    private void OnEnable()
+    {
+        if (!allButtons.Contains(this))
+        {
+            allButtons.Add(this);
+        }
+    }
+
+    private void OnDisable()
+    {
+        allButtons.Remove(this);
+    }
 
     // Start is called before the first frame update
     void Start()
@@ -81,6 +96,69 @@ public class BuildMenuButton : MonoBehaviour
         }
 
         BuildConstruction.instance.GetGridPosition(gridX, gridY);
+
+        if (BuildConstruction.instance.LastConstructionSucceeded)
+        {
+            SetConstructedButtonsForLastBuild(BuildConstruction.instance);
+        }
+    }
+
+    private static void SetConstructedButtonsForLastBuild(BuildConstruction buildConstruction)
+    {
+        int startX = buildConstruction.LastConstructedGridX;
+        int startY = buildConstruction.LastConstructedGridY;
+        int width = buildConstruction.LastConstructedWidth;
+        int depth = buildConstruction.LastConstructedDepth;
+
+        if (startX < 1 || startY < 1 || width < 1 || depth < 1)
+        {
+            return;
+        }
+
+        int endX = startX + width - 1;
+        int endY = startY + depth - 1;
+
+        for (int i = 0; i < allButtons.Count; i++)
+        {
+            BuildMenuButton buildButton = allButtons[i];
+            if (buildButton == null)
+            {
+                continue;
+            }
+
+            bool insideFootprint =
+                buildButton.gridX >= startX && buildButton.gridX <= endX &&
+                buildButton.gridY >= startY && buildButton.gridY <= endY;
+
+            if (insideFootprint)
+            {
+                buildButton.SetConstructedButtonColor();
+            }
+        }
+    }
+
+    private void SetConstructedButtonColor()
+    {
+        if (button == null || hasBeenConstructed)
+        {
+            return;
+        }
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = Color.red;
+        colors.highlightedColor = Color.red;
+        colors.pressedColor = Color.red;
+        colors.selectedColor = Color.red;
+        colors.disabledColor = Color.red;
+        button.colors = colors;
+
+        Image buttonImage = button.GetComponent<Image>();
+        if (buttonImage != null)
+        {
+            buttonImage.color = Color.red;
+        }
+
+        hasBeenConstructed = true;
     }
 
     private bool IsPointerOverThisButton()

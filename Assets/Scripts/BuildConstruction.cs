@@ -7,11 +7,25 @@ public class BuildConstruction : MonoBehaviour
     private int gridX = -1;
     private int gridY = -1;
     private int databaseIndex = -1;
+    public bool LastConstructionSucceeded { get; private set; }
+    public int LastConstructedGridX { get; private set; } = -1;
+    public int LastConstructedGridY { get; private set; } = -1;
+    public int LastConstructedWidth { get; private set; }
+    public int LastConstructedDepth { get; private set; }
     public static BuildConstruction instance { get; private set; }
 
     private int GridToInternalIndex(int oneBasedIndex)
     {
         return oneBasedIndex - 1;
+    }
+
+    private void GetFootprintOriginFromCenter(int centerGridX, int centerGridY, int width, int depth, out int originX, out int originY)
+    {
+        int centerInternalX = GridToInternalIndex(centerGridX);
+        int centerInternalY = GridToInternalIndex(centerGridY);
+
+        originX = centerInternalX - (width / 2);
+        originY = centerInternalY - (depth / 2);
     }
 
     private void Awake() {
@@ -25,8 +39,13 @@ public class BuildConstruction : MonoBehaviour
     public void GetGridPosition(int x, int y) {
         gridX = x;
         gridY = y;
+        LastConstructionSucceeded = false;
+        LastConstructedGridX = -1;
+        LastConstructedGridY = -1;
+        LastConstructedWidth = 0;
+        LastConstructedDepth = 0;
         UpdatePlacementPreview();
-        TryConstructBuilding();
+        LastConstructionSucceeded = TryConstructBuilding();
     }
 
     public void GetBuildingType(int buildingIndex) {
@@ -48,9 +67,6 @@ public class BuildConstruction : MonoBehaviour
             return;
         }
 
-        int internalGridX = GridToInternalIndex(gridX);
-        int internalGridY = GridToInternalIndex(gridY);
-
         if (databaseIndex <= 0 || !System.Enum.IsDefined(typeof(BuySystemManager.BuildingType), databaseIndex))
         {
             gridScript.ClearPlacementPreview();
@@ -70,79 +86,80 @@ public class BuildConstruction : MonoBehaviour
             return;
         }
 
+        GetFootprintOriginFromCenter(gridX, gridY, width, depth, out int internalGridX, out int internalGridY);
+
         bool requiresFullRoadSide = selectedType != BuySystemManager.BuildingType.Road;
         gridScript.SetPlacementPreview(internalGridX, internalGridY, width, depth, requiresFullRoadSide);
     }
 
-    private void TryConstructBuilding() {
+    private bool TryConstructBuilding() {
         if (gridX < 1 || gridY < 1) {
-            return;
+            return false;
         }
 
-        int internalGridX = GridToInternalIndex(gridX);
-        int internalGridY = GridToInternalIndex(gridY);
-
         if (databaseIndex <= 0 || !System.Enum.IsDefined(typeof(BuySystemManager.BuildingType), databaseIndex)) {
-            return;
+            return false;
         }
 
         if (BuySystemManager.instance == null) {
             Debug.LogWarning("BuySystemManager instance is missing.");
-            return;
+            return false;
         }
 
         GridScript gridScript = FindObjectOfType<GridScript>();
         if (gridScript == null) {
             Debug.LogWarning("GridScript instance is missing.");
-            return;
+            return false;
         }
 
         BuySystemManager.BuildingType selectedType = (BuySystemManager.BuildingType)databaseIndex;
         if (!BuySystemManager.instance.TryGetBuildingData(selectedType, out GameObject prefab, out int width, out int depth)) {
             Debug.LogWarning("No prefab configured for selected building type: " + selectedType);
-            return;
+            return false;
         }
+
+        GetFootprintOriginFromCenter(gridX, gridY, width, depth, out int internalGridX, out int internalGridY);
 
         if (!BuySystemManager.instance.TryGetBuildingCost(selectedType, out int buildingCost))
         {
             Debug.LogWarning("No building cost configured for selected building type: " + selectedType);
-            return;
+            return false;
         }
 
         if (ResourceManager.instance == null)
         {
             Debug.LogWarning("ResourceManager instance is missing.");
-            return;
+            return false;
         }
 
         if (!ResourceManager.instance.CanAfford(buildingCost))
         {
             Debug.Log($"Cannot build {selectedType}. Required: {buildingCost}, Current money: {ResourceManager.instance.Money}");
-            return;
+            return false;
         }
 
         if (!gridScript.CanPlaceBuilding(internalGridX, internalGridY, width, depth)) {
             Debug.Log("Cannot build here. The area is occupied or out of bounds.");
-            return;
+            return false;
         }
 
         if (selectedType != BuySystemManager.BuildingType.Road &&
             !gridScript.HasAtLeastOneFullRoadSide(internalGridX, internalGridY, width, depth)) {
             Debug.Log("Cannot build here. Non-road buildings need at least one full side touching roads.");
-            return;
+            return false;
         }
 
         if (selectedType == BuySystemManager.BuildingType.Road &&
             !CanPlaceRoadWithConnection(gridScript, internalGridX, internalGridY, width, depth))
         {
             Debug.Log("Cannot build here. Roads must connect to an existing road (except the first road).");
-            return;
+            return false;
         }
 
         if (!ResourceManager.instance.SpendMoney(buildingCost))
         {
             Debug.Log($"Cannot build {selectedType}. Not enough money.");
-            return;
+            return false;
         }
 
         bool markAsRoad = selectedType == BuySystemManager.BuildingType.Road;
@@ -175,12 +192,19 @@ public class BuildConstruction : MonoBehaviour
             RefreshAllRoadRotations(gridScript);
         }
 
+        LastConstructedGridX = internalGridX + 1;
+        LastConstructedGridY = internalGridY + 1;
+        LastConstructedWidth = width;
+        LastConstructedDepth = depth;
+   
         ResetPendingGridPosition();
 
         if (gridScript != null)
         {
             gridScript.ClearPlacementPreview();
         }
+
+        return true;
     }
 
     private void ResetPendingGridPosition()
