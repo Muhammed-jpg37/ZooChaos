@@ -11,6 +11,9 @@ public class ResourceManager : MonoBehaviour
 	[SerializeField] private int money;
 	[SerializeField] private TMP_Text moneyText;
 	[SerializeField] private string moneyPrefix = "$";
+	private int dayStartBalance;
+	private int dayIncome;
+	private int dayExpenses;
 
 	[Header("Customer Happiness")]
 	[SerializeField, Range(0f, 100f)] private float customerHappiness = 50f;
@@ -29,6 +32,9 @@ public class ResourceManager : MonoBehaviour
 
 	public int Money => money;
 	public float CustomerHappiness => customerHappiness;
+	public int DayStartBalance => dayStartBalance;
+	public int DayIncome => dayIncome;
+	public int DayExpenses => dayExpenses;
 
 	private void Awake()
 	{
@@ -40,6 +46,7 @@ public class ResourceManager : MonoBehaviour
 
 		instance = this;
 		money = startingMoney;
+		BeginDayFinancials();
 		RefreshMoneyUI();
 	}
 
@@ -67,7 +74,9 @@ public class ResourceManager : MonoBehaviour
 
 	public void AddMoney(int amount)
 	{
-		money += Mathf.Max(0, amount);
+		int validAmount = Mathf.Max(0, amount);
+		money += validAmount;
+		dayIncome += validAmount;
 		RefreshMoneyUI();
 	}
 
@@ -85,8 +94,16 @@ public class ResourceManager : MonoBehaviour
 		}
 
 		money -= validAmount;
+		dayExpenses += validAmount;
 		RefreshMoneyUI();
 		return true;
+	}
+
+	public void BeginDayFinancials()
+	{
+		dayStartBalance = money;
+		dayIncome = 0;
+		dayExpenses = 0;
 	}
 
 	private void RefreshMoneyUI()
