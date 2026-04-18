@@ -12,6 +12,7 @@ public class AnimalBehaviour : MonoBehaviour
     public enum NeedType { None, Water, Urine, Food }
     public NeedType currentNeed = NeedType.None;
     private bool isNeedActive = false;
+    private DayEndScript dayEndScript;
 
     [Header("UI References")]
     public GameObject[] needIndicators; // 0: Water, 1: Urine, 2: Food
@@ -22,12 +23,23 @@ public class AnimalBehaviour : MonoBehaviour
 
     void Start()
     {
-        needCheckInterval = 10f;
+        dayEndScript = FindObjectOfType<DayEndScript>();
+        needCheckInterval = 30f;
         InvokeRepeating("CheckForNeeds", 5f, needCheckInterval);
     }
 
     void CheckForNeeds()
     {
+        if (dayEndScript == null)
+        {
+            dayEndScript = FindObjectOfType<DayEndScript>();
+        }
+
+        if (dayEndScript != null && !dayEndScript.IsDayRunning)
+        {
+            return;
+        }
+
         if (currentNeed == NeedType.None)
         {
             int randomNeed = Random.Range(1, 4); // 1 to 3

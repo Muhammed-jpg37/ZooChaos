@@ -26,6 +26,7 @@ public class ResourceManager : MonoBehaviour
 	[Header("Customer Spawn")]
 	[SerializeField] private GameObject customerPrefab;
 	[SerializeField] private Transform customerSpawnPoint;
+	[SerializeField] private bool customerSpawningEnabled = true;
 
 	private readonly List<CustomerBehaviour> activeCustomers = new List<CustomerBehaviour>();
 	private float spawnTimer;
@@ -35,6 +36,7 @@ public class ResourceManager : MonoBehaviour
 	public int DayStartBalance => dayStartBalance;
 	public int DayIncome => dayIncome;
 	public int DayExpenses => dayExpenses;
+	public bool IsCustomerSpawningEnabled => customerSpawningEnabled;
 
 	private void Awake()
 	{
@@ -60,6 +62,11 @@ public class ResourceManager : MonoBehaviour
 		CleanupCustomers();
 
 		if (customerPrefab == null)
+		{
+			return;
+		}
+
+		if (!customerSpawningEnabled)
 		{
 			return;
 		}
@@ -104,6 +111,29 @@ public class ResourceManager : MonoBehaviour
 		dayStartBalance = money;
 		dayIncome = 0;
 		dayExpenses = 0;
+	}
+
+	public void SetCustomerSpawningEnabled(bool isEnabled)
+	{
+		customerSpawningEnabled = isEnabled;
+		if (isEnabled)
+		{
+			spawnTimer = 0f;
+		}
+	}
+
+	public void DespawnAllCustomers()
+	{
+		for (int i = activeCustomers.Count - 1; i >= 0; i--)
+		{
+			CustomerBehaviour customer = activeCustomers[i];
+			if (customer != null)
+			{
+				Destroy(customer.gameObject);
+			}
+		}
+
+		activeCustomers.Clear();
 	}
 
 	private void RefreshMoneyUI()

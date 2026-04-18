@@ -33,6 +33,8 @@ public class DayEndScript : MonoBehaviour
     private int dayNumber = 1;
     private bool isDayRunning;
 
+    public bool IsDayRunning => isDayRunning;
+
     private void Start()
     {
         resourceManager = ResourceManager.instance;
@@ -78,6 +80,7 @@ public class DayEndScript : MonoBehaviour
         if (resourceManager != null)
         {
             resourceManager.BeginDayFinancials();
+            resourceManager.SetCustomerSpawningEnabled(true);
         }
 
         if (dayEndPanel != null)
@@ -105,6 +108,13 @@ public class DayEndScript : MonoBehaviour
         isDayRunning = false;
         elapsedDayTime = dayDurationSeconds;
         UpdateClockUI();
+
+        if (resourceManager != null)
+        {
+            resourceManager.SetCustomerSpawningEnabled(false);
+            resourceManager.DespawnAllCustomers();
+        }
+
         ShowDayEndSummary();
 
         if (playerMovementController != null)
@@ -128,6 +138,11 @@ public class DayEndScript : MonoBehaviour
         }
 
         SetBuildModeVisible(true);
+    }
+
+    public void OnStartNextDayButtonPressed()
+    {
+        BeginNewDay();
     }
 
     private void UpdateClockUI()
