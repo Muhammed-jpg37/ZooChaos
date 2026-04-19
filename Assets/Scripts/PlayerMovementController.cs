@@ -7,7 +7,14 @@ public class PlayerMovementController : MonoBehaviour
     private Rigidbody rb;
     [SerializeField] private float moveSpeed = 8f;
     [SerializeField] private Transform startPoint;
+    [SerializeField] private GameObject cameraStartPoint;
 
+    [SerializeField] private GameObject secondCameraPoint;
+
+    [SerializeField] private GameObject Camera;
+
+
+  
     private Vector3 initialStartPosition;
     private bool canMove = true;
 
