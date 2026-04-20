@@ -227,7 +227,7 @@ public class BuildConstruction : MonoBehaviour
         }
 
         BuySystemManager.BuildingType selectedType = (BuySystemManager.BuildingType)databaseIndex;
-        if (!BuySystemManager.instance.TryGetBuildingData(selectedType, out GameObject prefab, out int width, out int depth)) {
+        if (!BuySystemManager.instance.TryGetBuildingPlacementData(selectedType, out GameObject prefab, out int width, out int depth, out Vector3 buildSpawnOffset)) {
             Debug.LogWarning("No prefab configured for selected building type: " + selectedType);
             return false;
         }
@@ -291,7 +291,7 @@ public class BuildConstruction : MonoBehaviour
             spawnRotation = GetRoadRotation(gridScript, internalGridX, internalGridY);
         }
 
-        GameObject spawnedBuilding = Instantiate(prefab, spawnPosition, spawnRotation);
+        GameObject spawnedBuilding = Instantiate(prefab, spawnPosition + buildSpawnOffset, spawnRotation);
 
         BuildingInstance buildingInstance = spawnedBuilding.GetComponent<BuildingInstance>();
         if (buildingInstance == null)

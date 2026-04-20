@@ -14,6 +14,7 @@ public class BuySystemManager : MonoBehaviour
         public int width = 1;
         public int depth = 1;
         public int cost = 0;
+        public Vector3 spawnOffset = Vector3.zero;
     }
 
     private void Awake() {
@@ -69,6 +70,24 @@ public class BuySystemManager : MonoBehaviour
         prefab = entry.prefab;
         width = Mathf.Max(1, entry.width);
         depth = Mathf.Max(1, entry.depth);
+        return true;
+    }
+
+    public bool TryGetBuildingPlacementData(BuildingType type, out GameObject prefab, out int width, out int depth, out Vector3 spawnOffset)
+    {
+        prefab = null;
+        width = 0;
+        depth = 0;
+        spawnOffset = Vector3.zero;
+
+        if (!buildingLookup.TryGetValue(type, out BuildingEntry entry) || entry.prefab == null) {
+            return false;
+        }
+
+        prefab = entry.prefab;
+        width = Mathf.Max(1, entry.width);
+        depth = Mathf.Max(1, entry.depth);
+        spawnOffset = entry.spawnOffset;
         return true;
     }
 

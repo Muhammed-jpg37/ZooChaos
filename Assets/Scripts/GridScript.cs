@@ -4,9 +4,17 @@ using System.Collections.Generic;
 public class GridScript : MonoBehaviour
 {
 [Header("Grid Layout")]
-    public int gridSize = 40; 
+    [SerializeField] private int startingGridSize = 10;
+    public int gridSize = 10; 
     public float cellSize = 1f;
-    public Vector2 startCorner = new Vector2(-12.5f, -12.5f); // Bottom-Left Anchor
+    [SerializeField] private Vector2 startingStartCorner = new Vector2(127, 66);
+    public Vector2 startCorner = new Vector2(-5f, -5f); // Bottom-Left Anchor
+
+    [Header("Grid Upgrades")]
+    [SerializeField] private int gridUpgradeCost = 100;
+    [SerializeField] private int gridUpgradeCostIncrease = 50;
+    [SerializeField] private Transform groundPlane;
+    [SerializeField] private float groundPlaneBaseSize = 10f;
     
     [Header("Visuals")]
     public Color gridColor = Color.green;
@@ -23,6 +31,69 @@ public class GridScript : MonoBehaviour
     private int previewWidth = 1;
     private int previewDepth = 1;
     private bool previewRequiresFullRoadSide;
+
+    private void Awake()
+    {
+        ResetToStartingGrid();
+    }
+
+    private void OnValidate()
+    {
+        if (groundPlane != null)
+        {
+            UpdateGroundPlaneScale();
+        }
+    }
+
+    public int CurrentGridUpgradeCost => Mathf.Max(0, gridUpgradeCost);
+
+    public bool TryPurchaseGridUpgrade()
+    {
+        if (ResourceManager.instance == null)
+        {
+            return false;
+        }
+
+        int cost = Mathf.Max(0, gridUpgradeCost);
+        if (!ResourceManager.instance.SpendMoney(cost))
+        {
+            return false;
+        }
+
+        gridSize = Mathf.Max(1, gridSize + 1);
+        gridUpgradeCost += Mathf.Max(0, gridUpgradeCostIncrease);
+        UpdateGroundPlaneScale();
+        return true;
+    }
+
+    private void ResetToStartingGrid()
+    {
+        gridSize = Mathf.Max(1, startingGridSize);
+        startCorner = startingStartCorner;
+        UpdateGroundPlaneScale();
+    }
+
+    private void UpdateGroundPlaneScale()
+    {
+        if (groundPlane == null)
+        {
+            return;
+        }
+
+        float planeWorldSize = Mathf.Max(0.01f, groundPlaneBaseSize);
+        float worldSize = gridSize * cellSize;
+        float scale = worldSize / planeWorldSize;
+
+        Vector3 currentScale = groundPlane.localScale;
+        groundPlane.localScale = new Vector3(scale, currentScale.y, scale);
+
+        Vector3 anchoredPosition = new Vector3(
+            startCorner.x + (worldSize * 0.5f),
+            groundPlane.position.y,
+            startCorner.y + (worldSize * 0.5f)
+        );
+        groundPlane.position = anchoredPosition;
+    }
 
     public void SetPlacementPreview(int gridX, int gridZ, int width, int depth, bool requiresFullRoadSide = false)
     {
