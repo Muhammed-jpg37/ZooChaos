@@ -11,13 +11,11 @@ public class GridScript : MonoBehaviour
     [Header("Visuals")]
     public Color gridColor = Color.green;
     public Color occupiedCellColor = new Color(0.2f, 0.45f, 1f, 0.35f);
-    public Color largeOccupiedCellColor = new Color(1f, 0.2f, 0.2f, 0.45f);
     public Color validPreviewColor = new Color(0.2f, 0.9f, 0.3f, 0.35f);
     public Color invalidPreviewColor = new Color(0.95f, 0.2f, 0.2f, 0.35f);
 
     // Data storage for occupied cells
     private HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
-    private HashSet<Vector2Int> largeOccupiedCells = new HashSet<Vector2Int>();
     private HashSet<Vector2Int> roadCells = new HashSet<Vector2Int>();
     private bool hasPreview;
     private int previewX;
@@ -41,10 +39,10 @@ public class GridScript : MonoBehaviour
         hasPreview = false;
         previewRequiresFullRoadSide = false;
     }
-
+    /// <summary>
     /// Checks if a building footprint is clear.
     /// gridX/gridZ are the local grid indices (0 to gridSize-1)
-  
+    /// </summary>
     public bool CanPlaceBuilding(int gridX, int gridZ, int width, int depth)
     {
         for (int x = 0; x < width; x++)
@@ -68,23 +66,12 @@ public class GridScript : MonoBehaviour
 
     public void MarkCellsOccupied(int gridX, int gridZ, int width, int depth, bool markAsRoad = false)
     {
-        bool isLargeFootprint = width > 1 || depth > 1;
-
         for (int x = 0; x < width; x++)
         {
             for (int z = 0; z < depth; z++)
             {
                 Vector2Int cell = new Vector2Int(gridX + x, gridZ + z);
                 occupiedCells.Add(cell);
-
-                if (isLargeFootprint)
-                {
-                    largeOccupiedCells.Add(cell);
-                }
-                else
-                {
-                    largeOccupiedCells.Remove(cell);
-                }
 
                 if (markAsRoad)
                 {
@@ -305,14 +292,13 @@ public class GridScript : MonoBehaviour
 
         if (occupiedCells != null && occupiedCells.Count > 0)
         {
+            Gizmos.color = occupiedCellColor;
             foreach (Vector2Int cell in occupiedCells)
             {
                 if (cell.x < 0 || cell.x >= gridSize || cell.y < 0 || cell.y >= gridSize)
                 {
                     continue;
                 }
-
-                Gizmos.color = largeOccupiedCells.Contains(cell) ? largeOccupiedCellColor : occupiedCellColor;
 
                 Vector3 cellCenter = new Vector3(
                     startCorner.x + (cell.x + 0.5f) * cellSize,

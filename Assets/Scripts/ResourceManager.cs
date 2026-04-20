@@ -218,7 +218,7 @@ public class ResourceManager : MonoBehaviour
 			return customerSpawnPoint.position;
 		}
 
-		GridScript gridScript = FindObjectOfType<GridScript>();
+		GridScript gridScript = FindGridScript();
 		if (gridScript != null)
 		{
 			List<Vector2Int> roadCells = gridScript.GetRoadCells();
@@ -230,6 +230,34 @@ public class ResourceManager : MonoBehaviour
 		}
 
 		return transform.position;
+	}
+
+	private GridScript FindGridScript()
+	{
+		GridScript activeGrid = FindObjectOfType<GridScript>();
+		if (activeGrid != null)
+		{
+			return activeGrid;
+		}
+
+		GridScript[] allGrids = Resources.FindObjectsOfTypeAll<GridScript>();
+		for (int i = 0; i < allGrids.Length; i++)
+		{
+			GridScript grid = allGrids[i];
+			if (grid == null)
+			{
+				continue;
+			}
+
+			if (!grid.gameObject.scene.IsValid())
+			{
+				continue;
+			}
+
+			return grid;
+		}
+
+		return null;
 	}
 
 	private void CleanupCustomers()

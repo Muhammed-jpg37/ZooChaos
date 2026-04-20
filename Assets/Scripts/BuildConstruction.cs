@@ -18,10 +18,10 @@ public class BuildConstruction : MonoBehaviour
     [SerializeField] private LayerMask previewSurfaceMask = ~0;
     [SerializeField] private float previewRaycastDistance = 2000f;
     [SerializeField] private TMP_Text previewSizeText;
-    [Header("Road Visuals")]
-    [SerializeField] private GameObject roadDefaultVisualPrefab;
-    [SerializeField] private GameObject roadTVisualPrefab;
-    [SerializeField] private GameObject roadLVisualPrefab;
+    [Header("Construction Effects")]
+    [SerializeField] private GameObject constructionSmokePrefab;
+    [SerializeField] private float constructionSmokeDuration = 1f;
+    [SerializeField] private Vector3 constructionSmokeOffset = new Vector3(0f, 0.5f, 0f);
     public bool LastConstructionSucceeded { get; private set; }
     public int LastConstructedGridX { get; private set; } = -1;
     public int LastConstructedGridY { get; private set; } = -1;
@@ -32,23 +32,8 @@ public class BuildConstruction : MonoBehaviour
 
     private GameObject previewInstance;
     private Renderer[] previewRenderers;
-    private GameObject previewPrefab;
     private BuySystemManager.BuildingType previewType = BuySystemManager.BuildingType.None;
     private MaterialPropertyBlock previewPropertyBlock;
-
-    private enum RoadVisualVariant
-    {
-        Default,
-        T,
-        L
-    }
-
-    private struct RoadVisualPlacement
-    {
-        public GameObject prefab;
-        public Quaternion rotation;
-        public Vector3 positionOffset;
-    }
 
     private int GridToInternalIndex(int oneBasedIndex)
     {
@@ -218,15 +203,7 @@ public class BuildConstruction : MonoBehaviour
         gridScript.SetPlacementPreview(internalGridX, internalGridY, width, depth, requiresFullRoadSide);
 
         bool canPlace = CanPlaceSelectedBuildingAt(gridScript, selectedType, internalGridX, internalGridY, width, depth);
-        if (selectedType == BuySystemManager.BuildingType.Road)
-        {
-            RoadVisualPlacement roadPreview = GetRoadVisualPlacement(gridScript, internalGridX, internalGridY, prefab);
-            ShowOrUpdateBuildingPreview(gridScript, selectedType, roadPreview.prefab, internalGridX, internalGridY, width, depth, canPlace, roadPreview.rotation, roadPreview.positionOffset);
-        }
-        else
-        {
-            ShowOrUpdateBuildingPreview(gridScript, selectedType, prefab, internalGridX, internalGridY, width, depth, canPlace, Quaternion.identity, Vector3.zero);
-        }
+        ShowOrUpdateBuildingPreview(gridScript, selectedType, prefab, internalGridX, internalGridY, width, depth, canPlace);
     }
 
     private bool TryConstructBuilding() {
@@ -302,27 +279,33 @@ public class BuildConstruction : MonoBehaviour
         bool markAsRoad = selectedType == BuySystemManager.BuildingType.Road;
         gridScript.MarkCellsOccupied(internalGridX, internalGridY, width, depth, markAsRoad);
 
+        Vector3 spawnPosition = new Vector3(
+            gridScript.startCorner.x + (internalGridX + (width * 0.5f)) * gridScript.cellSize,
+            0f,
+            gridScript.startCorner.y + (internalGridY + (depth * 0.5f)) * gridScript.cellSize
+        );
+
+        Quaternion spawnRotation = Quaternion.identity;
         if (selectedType == BuySystemManager.BuildingType.Road)
         {
-            RefreshAllRoadVisuals(gridScript, prefab);
+            spawnRotation = GetRoadRotation(gridScript, internalGridX, internalGridY);
         }
-        else
+
+        GameObject spawnedBuilding = Instantiate(prefab, spawnPosition, spawnRotation);
+
+        BuildingInstance buildingInstance = spawnedBuilding.GetComponent<BuildingInstance>();
+        if (buildingInstance == null)
         {
-            Vector3 spawnPosition = new Vector3(
-                gridScript.startCorner.x + (internalGridX + (width * 0.5f)) * gridScript.cellSize,
-                0f,
-                gridScript.startCorner.y + (internalGridY + (depth * 0.5f)) * gridScript.cellSize
-            );
+            buildingInstance = spawnedBuilding.AddComponent<BuildingInstance>();
+        }
 
-            GameObject spawnedBuilding = Instantiate(prefab, spawnPosition, Quaternion.identity);
+        buildingInstance.Initialize(selectedType, new Vector2Int(internalGridX, internalGridY), width, depth);
 
-            BuildingInstance buildingInstance = spawnedBuilding.GetComponent<BuildingInstance>();
-            if (buildingInstance == null)
-            {
-                buildingInstance = spawnedBuilding.AddComponent<BuildingInstance>();
-            }
+        PlayConstructionSmoke(spawnPosition);
 
-            buildingInstance.Initialize(selectedType, new Vector2Int(internalGridX, internalGridY), width, depth);
+        if (selectedType == BuySystemManager.BuildingType.Road)
+        {
+            RefreshAllRoadRotations(gridScript);
         }
 
         LastConstructedGridX = internalGridX + 1;
@@ -341,6 +324,26 @@ public class BuildConstruction : MonoBehaviour
         ClearBuildingPreviewVisual();
 
         return true;
+    }
+
+    private void PlayConstructionSmoke(Vector3 basePosition)
+    {
+        if (constructionSmokePrefab == null)
+        {
+            return;
+        }
+
+        Vector3 smokePosition = basePosition + constructionSmokeOffset;
+        GameObject smokeInstance = Instantiate(constructionSmokePrefab, smokePosition, Quaternion.identity);
+
+        ParticleSystem[] particleSystems = smokeInstance.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            particleSystems[i].Play();
+        }
+
+        float lifetime = Mathf.Max(0.1f, constructionSmokeDuration);
+        Destroy(smokeInstance, lifetime);
     }
 
     private void ResetPendingGridPosition()
@@ -453,9 +456,7 @@ public class BuildConstruction : MonoBehaviour
         int internalGridY,
         int width,
         int depth,
-        bool canPlace,
-        Quaternion previewRotation,
-        Vector3 previewOffset)
+        bool canPlace)
     {
         EnsurePreviewInstance(prefab, selectedType);
         if (previewInstance == null)
@@ -467,7 +468,13 @@ public class BuildConstruction : MonoBehaviour
             gridScript.startCorner.x + (internalGridX + (width * 0.5f)) * gridScript.cellSize,
             0f,
             gridScript.startCorner.y + (internalGridY + (depth * 0.5f)) * gridScript.cellSize
-        ) + previewOffset;
+        );
+
+        Quaternion previewRotation = Quaternion.identity;
+        if (selectedType == BuySystemManager.BuildingType.Road)
+        {
+            previewRotation = GetRoadRotation(gridScript, internalGridX, internalGridY);
+        }
 
         previewInstance.transform.SetPositionAndRotation(previewPosition, previewRotation);
         SetPreviewColor(canPlace ? previewValidColor : previewInvalidColor);
@@ -481,7 +488,7 @@ public class BuildConstruction : MonoBehaviour
             return;
         }
 
-        if (previewInstance != null && previewType == selectedType && previewPrefab == prefab)
+        if (previewInstance != null && previewType == selectedType)
         {
             return;
         }
@@ -490,7 +497,6 @@ public class BuildConstruction : MonoBehaviour
 
         previewInstance = Instantiate(prefab);
         previewInstance.name = prefab.name + "_Preview";
-        previewPrefab = prefab;
         previewType = selectedType;
         previewRenderers = previewInstance.GetComponentsInChildren<Renderer>(true);
 
@@ -532,105 +538,45 @@ public class BuildConstruction : MonoBehaviour
 
         previewInstance = null;
         previewRenderers = null;
-        previewPrefab = null;
         previewType = BuySystemManager.BuildingType.None;
     }
 
-    private RoadVisualPlacement GetRoadVisualPlacement(GridScript gridScript, int gridX, int gridZ, GameObject defaultRoadPrefab)
+    private Quaternion GetRoadRotation(GridScript gridScript, int gridX, int gridZ)
     {
         bool hasLeftRoad = gridScript.IsRoadCell(new Vector2Int(gridX - 1, gridZ));
         bool hasRightRoad = gridScript.IsRoadCell(new Vector2Int(gridX + 1, gridZ));
         bool hasForwardRoad = gridScript.IsRoadCell(new Vector2Int(gridX, gridZ + 1));
         bool hasBackRoad = gridScript.IsRoadCell(new Vector2Int(gridX, gridZ - 1));
 
-        int connectedCount = 0;
-        if (hasLeftRoad) connectedCount++;
-        if (hasRightRoad) connectedCount++;
-        if (hasForwardRoad) connectedCount++;
-        if (hasBackRoad) connectedCount++;
+        bool connectedOnX = hasLeftRoad || hasRightRoad;
+        bool connectedOnZ = hasForwardRoad || hasBackRoad;
 
-        RoadVisualVariant variant = RoadVisualVariant.Default;
-        float yRotation = 0f;
+        bool straightX = hasLeftRoad && hasRightRoad;
+        bool straightZ = hasForwardRoad && hasBackRoad;
 
-        if (connectedCount == 2)
+        // Keep single/isolated road tile horizontal as the default start orientation.
+        if (!connectedOnX && !connectedOnZ)
         {
-            bool oppositeX = hasLeftRoad && hasRightRoad;
-            bool oppositeZ = hasForwardRoad && hasBackRoad;
-
-            if (!oppositeX && !oppositeZ)
-            {
-                variant = RoadVisualVariant.L;
-
-                if (hasForwardRoad && hasRightRoad)
-                {
-                    yRotation = 180f;
-                }
-                else if (hasRightRoad && hasBackRoad)
-                {
-                    yRotation = 270f;
-                }
-                else if (hasBackRoad && hasLeftRoad)
-                {
-                    yRotation = 0f;
-                }
-                else
-                {
-                    yRotation = 90f;
-                }
-            }
-            else if (oppositeZ)
-            {
-                yRotation = 90f;
-            }
-        }
-        else if (connectedCount == 3)
-        {
-            variant = RoadVisualVariant.T;
-
-            if (!hasBackRoad)
-            {
-                yRotation = 180f;
-            }
-            else if (!hasLeftRoad)
-            {
-                yRotation = 90f;
-            }
-            else if (!hasForwardRoad)
-            {
-                yRotation = 0f;
-            }
-            else
-            {
-                yRotation = 270f;
-            }
-        }
-        else if (hasForwardRoad || hasBackRoad)
-        {
-            yRotation = 90f;
+            return Quaternion.Euler(-90f, 0f, 90f);
         }
 
-        Quaternion rotation = Quaternion.Euler(-90f, yRotation, -90f);
-        Vector3 positionOffset = Vector3.zero;
-
-        return new RoadVisualPlacement
+        if (straightZ && !straightX)
         {
-            prefab = GetRoadPrefabForVariant(variant, defaultRoadPrefab),
-            rotation = rotation,
-            positionOffset = positionOffset
-        };
-    }
-
-    private GameObject GetRoadPrefabForVariant(RoadVisualVariant variant, GameObject defaultRoadPrefab)
-    {
-        switch (variant)
-        {
-            case RoadVisualVariant.T:
-                return roadTVisualPrefab != null ? roadTVisualPrefab : defaultRoadPrefab;
-            case RoadVisualVariant.L:
-                return roadLVisualPrefab != null ? roadLVisualPrefab : defaultRoadPrefab;
-            default:
-                return roadDefaultVisualPrefab != null ? roadDefaultVisualPrefab : defaultRoadPrefab;
+            return Quaternion.Euler(-90f, 0f, 0f);
         }
+
+        if (straightX && !straightZ)
+        {
+            return Quaternion.Euler(-90f, 0f, 90f);
+        }
+
+        if (connectedOnZ && !connectedOnX)
+        {
+            return Quaternion.Euler(-90f, 0f, 0f);
+        }
+
+        // Junction/cross keeps base horizontal orientation to avoid flip jitter.
+        return Quaternion.Euler(-90f, 0f, 90f);
     }
 
     private bool CanPlaceRoadWithConnection(GridScript gridScript, int gridX, int gridZ, int width, int depth)
@@ -677,11 +623,9 @@ public class BuildConstruction : MonoBehaviour
         return false;
     }
 
-    private void RefreshAllRoadVisuals(GridScript gridScript, GameObject defaultRoadPrefab)
+    private void RefreshAllRoadRotations(GridScript gridScript)
     {
         BuildingInstance[] allBuildings = FindObjectsOfType<BuildingInstance>();
-        Dictionary<Vector2Int, BuildingInstance> existingRoadByCell = new Dictionary<Vector2Int, BuildingInstance>();
-
         for (int i = 0; i < allBuildings.Length; i++)
         {
             BuildingInstance building = allBuildings[i];
@@ -690,100 +634,9 @@ public class BuildConstruction : MonoBehaviour
                 continue;
             }
 
-            if (!existingRoadByCell.ContainsKey(building.GridOrigin))
-            {
-                existingRoadByCell.Add(building.GridOrigin, building);
-            }
-            else
-            {
-                Destroy(building.gameObject);
-            }
+            Vector2Int roadCell = building.GridOrigin;
+            building.transform.rotation = GetRoadRotation(gridScript, roadCell.x, roadCell.y);
         }
-
-        List<Vector2Int> roadCells = gridScript.GetRoadCells();
-        HashSet<Vector2Int> roadCellSet = new HashSet<Vector2Int>(roadCells);
-
-        List<Vector2Int> staleCells = new List<Vector2Int>();
-        foreach (KeyValuePair<Vector2Int, BuildingInstance> kvp in existingRoadByCell)
-        {
-            if (!roadCellSet.Contains(kvp.Key))
-            {
-                staleCells.Add(kvp.Key);
-            }
-        }
-
-        for (int i = 0; i < staleCells.Count; i++)
-        {
-            Vector2Int staleCell = staleCells[i];
-            if (existingRoadByCell.TryGetValue(staleCell, out BuildingInstance staleRoad) && staleRoad != null)
-            {
-                Destroy(staleRoad.gameObject);
-            }
-
-            existingRoadByCell.Remove(staleCell);
-        }
-
-        for (int i = 0; i < roadCells.Count; i++)
-        {
-            Vector2Int roadCell = roadCells[i];
-            RoadVisualPlacement roadVisual = GetRoadVisualPlacement(gridScript, roadCell.x, roadCell.y, defaultRoadPrefab);
-
-            if (roadVisual.prefab == null)
-            {
-                Debug.LogWarning("Road visual prefab is missing. Skipping road visual update for cell: " + roadCell);
-                continue;
-            }
-
-            Vector3 targetPosition = gridScript.CellToWorldCenter(roadCell) + roadVisual.positionOffset;
-
-            if (existingRoadByCell.TryGetValue(roadCell, out BuildingInstance existingRoad) && existingRoad != null)
-            {
-                if (IsInstanceFromPrefab(existingRoad.gameObject, roadVisual.prefab))
-                {
-                    existingRoad.transform.SetPositionAndRotation(targetPosition, roadVisual.rotation);
-                    existingRoad.Initialize(BuySystemManager.BuildingType.Road, roadCell, 1, 1);
-                }
-                else
-                {
-                    Destroy(existingRoad.gameObject);
-                    SpawnRoadVisual(roadCell, targetPosition, roadVisual.rotation, roadVisual.prefab);
-                }
-            }
-            else
-            {
-                SpawnRoadVisual(roadCell, targetPosition, roadVisual.rotation, roadVisual.prefab);
-            }
-        }
-    }
-
-    private bool IsInstanceFromPrefab(GameObject instanceObject, GameObject prefab)
-    {
-        if (instanceObject == null || prefab == null)
-        {
-            return false;
-        }
-
-        string instanceName = instanceObject.name;
-        const string cloneSuffix = "(Clone)";
-        if (instanceName.EndsWith(cloneSuffix))
-        {
-            instanceName = instanceName.Substring(0, instanceName.Length - cloneSuffix.Length).TrimEnd();
-        }
-
-        return instanceName == prefab.name;
-    }
-
-    private void SpawnRoadVisual(Vector2Int roadCell, Vector3 position, Quaternion rotation, GameObject prefab)
-    {
-        GameObject spawnedRoad = Instantiate(prefab, position, rotation);
-
-        BuildingInstance roadInstance = spawnedRoad.GetComponent<BuildingInstance>();
-        if (roadInstance == null)
-        {
-            roadInstance = spawnedRoad.AddComponent<BuildingInstance>();
-        }
-
-        roadInstance.Initialize(BuySystemManager.BuildingType.Road, roadCell, 1, 1);
     }
 
     private void OnDisable()

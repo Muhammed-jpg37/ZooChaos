@@ -3,6 +3,8 @@ using UnityEngine;
 
 public class CustomerBehaviour : MonoBehaviour
 {
+	private static readonly Dictionary<int, List<CustomerBehaviour>> buildingVisitQueues = new Dictionary<int, List<CustomerBehaviour>>();
+
 	private enum CustomerState
 	{
 		Travelling,
@@ -14,7 +16,13 @@ public class CustomerBehaviour : MonoBehaviour
 	[Header("Movement")]
 	[SerializeField] private float moveSpeed = 2.75f;
 	[SerializeField] private float arriveDistance = 0.05f;
-	[SerializeField] private float visitPauseDuration = 0.75f;
+	[SerializeField] private float minVisitPauseDuration = 4f;
+	[SerializeField] private float maxVisitPauseDuration = 9f;
+	[SerializeField] private float queueSlotSpacingCells = 0.9f;
+	[SerializeField] private float nearBuildingOffsetCells = 0.35f;
+	[SerializeField] private float walkTurnSpeed = 10f;
+	[SerializeField] private float minMoveSpeedMultiplier = 0.9f;
+	[SerializeField] private float maxMoveSpeedMultiplier = 1.15f;
 
 	[Header("Trip Plan")]
 	[SerializeField] private int minBuildingsToVisit = 1;
@@ -40,9 +48,12 @@ public class CustomerBehaviour : MonoBehaviour
 	private float visitTimer;
 	private Vector2Int currentRoadCell;
 	private Vector2Int entryRoadCell;
+	private Vector2Int targetEntranceRoadCell;
 	private Vector3 entryWorldPosition;
 	private bool hasEntryRoadCell;
+	private bool hasTargetEntranceRoadCell;
 	private bool isInitialized;
+	private float runtimeMoveSpeed;
 
 	private void OnEnable()
 	{
@@ -76,7 +87,10 @@ public class CustomerBehaviour : MonoBehaviour
 	public void Initialize(ResourceManager manager)
 	{
 		resourceManager = manager;
-		gridScript = FindObjectOfType<GridScript>();
+		gridScript = FindGridScript();
+		float minSpeed = Mathf.Max(0.2f, minMoveSpeedMultiplier);
+		float maxSpeed = Mathf.Max(minSpeed, maxMoveSpeedMultiplier);
+		runtimeMoveSpeed = moveSpeed * Random.Range(minSpeed, maxSpeed);
 
 		if (resourceManager == null || gridScript == null)
 		{
@@ -92,13 +106,43 @@ public class CustomerBehaviour : MonoBehaviour
 		PrepareTrip();
 	}
 
+	private GridScript FindGridScript()
+	{
+		GridScript activeGrid = FindObjectOfType<GridScript>();
+		if (activeGrid != null)
+		{
+			return activeGrid;
+		}
+
+		GridScript[] allGrids = Resources.FindObjectsOfTypeAll<GridScript>();
+		for (int i = 0; i < allGrids.Length; i++)
+		{
+			GridScript grid = allGrids[i];
+			if (grid == null)
+			{
+				continue;
+			}
+
+			if (!grid.gameObject.scene.IsValid())
+			{
+				continue;
+			}
+
+			return grid;
+		}
+
+		return null;
+	}
+
 	private void PrepareTrip()
 	{
+		LeaveCurrentQueue();
 		visitTargets.Clear();
 		travelPoints.Clear();
 		activeTarget = null;
 		travelIndex = 0;
 		visitTimer = 0f;
+		hasTargetEntranceRoadCell = false;
 
 		BuildingInstance[] allBuildings = FindObjectsOfType<BuildingInstance>();
 		List<BuildingInstance> candidates = new List<BuildingInstance>();
@@ -165,7 +209,8 @@ public class CustomerBehaviour : MonoBehaviour
 		}
 
 		Vector3 targetPoint = travelPoints[travelIndex];
-		transform.position = Vector3.MoveTowards(transform.position, targetPoint, moveSpeed * Time.deltaTime);
+		UpdateWalkingFacing(targetPoint);
+		transform.position = Vector3.MoveTowards(transform.position, targetPoint, runtimeMoveSpeed * Time.deltaTime);
 
 		if (Vector3.Distance(transform.position, targetPoint) <= arriveDistance)
 		{
@@ -179,6 +224,30 @@ public class CustomerBehaviour : MonoBehaviour
 
 	private void UpdateVisit()
 	{
+		if (activeTarget == null)
+		{
+			CompleteVisit();
+			return;
+		}
+
+		if (TryGetCurrentViewingPosition(out Vector3 viewingPosition))
+		{
+			transform.position = Vector3.MoveTowards(transform.position, viewingPosition, runtimeMoveSpeed * Time.deltaTime);
+
+			Vector3 lookDirection = activeTarget.transform.position - transform.position;
+			lookDirection.y = 0f;
+			if (lookDirection.sqrMagnitude > 0.0001f)
+			{
+				Quaternion targetRotation = Quaternion.LookRotation(lookDirection, Vector3.up);
+				transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 8f);
+			}
+
+			if (Vector3.Distance(transform.position, viewingPosition) > arriveDistance)
+			{
+				return;
+			}
+		}
+
 		visitTimer -= Time.deltaTime;
 		if (visitTimer > 0f)
 		{
@@ -193,7 +262,8 @@ public class CustomerBehaviour : MonoBehaviour
 		if (travelIndex < travelPoints.Count)
 		{
 			Vector3 targetPoint = travelPoints[travelIndex];
-			transform.position = Vector3.MoveTowards(transform.position, targetPoint, moveSpeed * Time.deltaTime);
+			UpdateWalkingFacing(targetPoint);
+			transform.position = Vector3.MoveTowards(transform.position, targetPoint, runtimeMoveSpeed * Time.deltaTime);
 
 			if (Vector3.Distance(transform.position, targetPoint) <= arriveDistance)
 			{
@@ -203,11 +273,39 @@ public class CustomerBehaviour : MonoBehaviour
 			return;
 		}
 
-		transform.position = Vector3.MoveTowards(transform.position, entryWorldPosition, moveSpeed * Time.deltaTime);
+		UpdateWalkingFacing(entryWorldPosition);
+		transform.position = Vector3.MoveTowards(transform.position, entryWorldPosition, runtimeMoveSpeed * Time.deltaTime);
 		if (Vector3.Distance(transform.position, entryWorldPosition) <= arriveDistance)
 		{
 			CompleteExit();
 		}
+	}
+
+	private void UpdateWalkingFacing(Vector3 targetPoint)
+	{
+		Vector3 direction = targetPoint - transform.position;
+		direction.y = 0f;
+		if (direction.sqrMagnitude < 0.0001f)
+		{
+			return;
+		}
+
+		Quaternion targetRotation = GetCardinalRotation(direction);
+		transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * Mathf.Max(1f, walkTurnSpeed));
+	}
+
+	private Quaternion GetCardinalRotation(Vector3 direction)
+	{
+		if (Mathf.Abs(direction.x) >= Mathf.Abs(direction.z))
+		{
+			return direction.x >= 0f
+				? Quaternion.Euler(0f, 90f, 0f)
+				: Quaternion.Euler(0f, 270f, 0f);
+		}
+
+		return direction.z >= 0f
+			? Quaternion.Euler(0f, 0f, 0f)
+			: Quaternion.Euler(0f, 180f, 0f);
 	}
 
 	private bool TryPrepareNextTravelPath()
@@ -256,6 +354,8 @@ public class CustomerBehaviour : MonoBehaviour
 
 			activeTarget = target;
 			currentRoadCell = bestEntrance;
+			targetEntranceRoadCell = bestEntrance;
+			hasTargetEntranceRoadCell = true;
 			state = CustomerState.Travelling;
 			return true;
 		}
@@ -266,16 +366,146 @@ public class CustomerBehaviour : MonoBehaviour
 	private void BeginVisit()
 	{
 		state = CustomerState.Visiting;
-		visitTimer = visitPauseDuration;
+		float minDuration = Mathf.Max(0.1f, minVisitPauseDuration);
+		float maxDuration = Mathf.Max(minDuration, maxVisitPauseDuration);
+		visitTimer = Random.Range(minDuration, maxDuration);
+		JoinCurrentQueue();
+	}
 
-		if (activeTarget != null)
+	private bool TryGetCurrentViewingPosition(out Vector3 viewingPosition)
+	{
+		viewingPosition = transform.position;
+
+		if (activeTarget == null || gridScript == null)
 		{
-			transform.position = activeTarget.transform.position;
+			return false;
 		}
+
+		if (!hasTargetEntranceRoadCell)
+		{
+			if (!gridScript.TryGetClosestRoadCell(transform.position, out targetEntranceRoadCell))
+			{
+				return false;
+			}
+
+			hasTargetEntranceRoadCell = true;
+		}
+
+		int slotIndex = GetQueueSlotIndex(activeTarget, this);
+		if (slotIndex < 0)
+		{
+			slotIndex = 0;
+		}
+
+		Vector2Int queueDirection = GetQueueDirectionAwayFromBuilding(activeTarget, targetEntranceRoadCell);
+		Vector2Int towardBuildingDirection = new Vector2Int(-queueDirection.x, -queueDirection.y);
+		Vector3 queueAnchor = gridScript.CellToWorldCenter(targetEntranceRoadCell);
+		float spacingWorld = Mathf.Max(0.2f, queueSlotSpacingCells) * gridScript.cellSize;
+		float nearOffsetWorld = Mathf.Clamp(nearBuildingOffsetCells, 0f, 0.49f) * gridScript.cellSize;
+		Vector3 nearBuildingOffset = new Vector3(towardBuildingDirection.x, 0f, towardBuildingDirection.y) * nearOffsetWorld;
+		Vector3 lineOffset = new Vector3(queueDirection.x, 0f, queueDirection.y) * (slotIndex * spacingWorld);
+		viewingPosition = queueAnchor + nearBuildingOffset + lineOffset;
+		return true;
+	}
+
+	private Vector2Int GetQueueDirectionAwayFromBuilding(BuildingInstance building, Vector2Int entranceCell)
+	{
+		int minX = building.GridOrigin.x;
+		int maxX = building.GridOrigin.x + building.Width - 1;
+		int minZ = building.GridOrigin.y;
+		int maxZ = building.GridOrigin.y + building.Depth - 1;
+
+		if (entranceCell.x < minX)
+		{
+			return Vector2Int.left;
+		}
+
+		if (entranceCell.x > maxX)
+		{
+			return Vector2Int.right;
+		}
+
+		if (entranceCell.y < minZ)
+		{
+			return Vector2Int.down;
+		}
+
+		if (entranceCell.y > maxZ)
+		{
+			return Vector2Int.up;
+		}
+
+		Vector2 buildingCenter = new Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
+		Vector2 away = new Vector2(entranceCell.x, entranceCell.y) - buildingCenter;
+		if (Mathf.Abs(away.x) >= Mathf.Abs(away.y))
+		{
+			return away.x >= 0f ? Vector2Int.right : Vector2Int.left;
+		}
+
+		return away.y >= 0f ? Vector2Int.up : Vector2Int.down;
+	}
+
+	private void JoinCurrentQueue()
+	{
+		if (activeTarget == null)
+		{
+			return;
+		}
+
+		int key = activeTarget.GetInstanceID();
+		if (!buildingVisitQueues.TryGetValue(key, out List<CustomerBehaviour> queue))
+		{
+			queue = new List<CustomerBehaviour>();
+			buildingVisitQueues[key] = queue;
+		}
+
+		if (!queue.Contains(this))
+		{
+			queue.Add(this);
+		}
+	}
+
+	private void LeaveCurrentQueue()
+	{
+		if (activeTarget == null)
+		{
+			return;
+		}
+
+		int key = activeTarget.GetInstanceID();
+		if (!buildingVisitQueues.TryGetValue(key, out List<CustomerBehaviour> queue))
+		{
+			return;
+		}
+
+		queue.Remove(this);
+		if (queue.Count == 0)
+		{
+			buildingVisitQueues.Remove(key);
+		}
+	}
+
+	private int GetQueueSlotIndex(BuildingInstance building, CustomerBehaviour customer)
+	{
+		if (building == null)
+		{
+			return -1;
+		}
+
+		int key = building.GetInstanceID();
+		if (!buildingVisitQueues.TryGetValue(key, out List<CustomerBehaviour> queue))
+		{
+			return -1;
+		}
+
+		return queue.IndexOf(customer);
+
 	}
 
 	private void CompleteVisit()
 	{
+		LeaveCurrentQueue();
+
 		if (activeTarget != null && resourceManager != null)
 		{
 			int reward = CalculateReward(activeTarget);
@@ -289,6 +519,7 @@ public class CustomerBehaviour : MonoBehaviour
 		}
 
 		activeTarget = null;
+		hasTargetEntranceRoadCell = false;
 		travelPoints.Clear();
 		travelIndex = 0;
 
@@ -322,7 +553,9 @@ public class CustomerBehaviour : MonoBehaviour
 		}
 
 		visitTargets.Clear();
+		LeaveCurrentQueue();
 		activeTarget = null;
+		hasTargetEntranceRoadCell = false;
 		travelPoints.Clear();
 		travelIndex = 0;
 		state = CustomerState.Exiting;
@@ -428,6 +661,8 @@ public class CustomerBehaviour : MonoBehaviour
 
 	private void OnDestroy()
 	{
+		LeaveCurrentQueue();
+
 		if (resourceManager != null)
 		{
 			resourceManager.UnregisterCustomer(this);
