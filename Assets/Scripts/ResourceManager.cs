@@ -10,7 +10,7 @@ public class ResourceManager : MonoBehaviour
 	[SerializeField] private int startingMoney = 0;
 	[SerializeField] private int money;
 	[SerializeField] private TMP_Text moneyText;
-	[SerializeField] private string moneyPrefix = "$";
+
 	private int dayStartBalance;
 	private int dayIncome;
 	private int dayExpenses;
@@ -143,9 +143,8 @@ public class ResourceManager : MonoBehaviour
 			return;
 		}
 
-		moneyText.text = string.IsNullOrEmpty(moneyPrefix)
-			? money.ToString()
-			: $"{moneyPrefix}{money}";
+		moneyText.text = money.ToString();
+		
 	}
 
 	public void AddCustomerHappiness(float amount)

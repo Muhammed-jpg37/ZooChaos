@@ -80,7 +80,7 @@ public class CustomerBehaviour : MonoBehaviour
 
 		if (resourceManager == null || gridScript == null)
 		{
-			Debug.LogWarning("CustomerBehaviour could not initialize because ResourceManager or GridScript is missing.");
+			//Debug.LogWarning("CustomerBehaviour could not initialize because ResourceManager or GridScript is missing.");
 			Destroy(gameObject);
 			return;
 		}
