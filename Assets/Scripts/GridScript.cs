@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public class GridScript : MonoBehaviour
 {
-    private enum LockedExpansionSide
+    public enum EntrySide
     {
         None,
         Bottom,
@@ -18,13 +18,12 @@ public class GridScript : MonoBehaviour
     public float cellSize = 1f;
     [SerializeField] private Vector2 startingStartCorner = new Vector2(127, 66);
     public Vector2 startCorner = new Vector2(-5f, -5f); // Bottom-Left Anchor
-
-    [Header("Grid Upgrades")]
-    [SerializeField] private int gridUpgradeCost = 100;
-    [SerializeField] private int gridUpgradeCostIncrease = 50;
-    [SerializeField] private LockedExpansionSide lockedExpansionSide = LockedExpansionSide.None;
+    [SerializeField] private int chunkSize = 10;
+    [SerializeField] private int chunkPurchaseCost = 100;
     [SerializeField] private Transform groundPlane;
     [SerializeField] private float groundPlaneBaseSize = 10f;
+    [SerializeField] private GameObject shaderPlanePrefab;
+    [SerializeField] private Transform shaderPlaneParent;
 
     [Header("Perimeter Walls")]
     [SerializeField] private GameObject exteriorWallPrefab;
@@ -37,7 +36,6 @@ public class GridScript : MonoBehaviour
     [SerializeField] private Vector3 rightWallOffset = Vector3.zero;
     [SerializeField] private Vector3 bottomLeftCornerOffset = Vector3.zero;
     [SerializeField] private Vector3 bottomRightCornerOffset = Vector3.zero;
-    
     [SerializeField] private Vector3 topLeftCornerOffset = Vector3.zero;
     [SerializeField] private Vector3 topRightCornerOffset = Vector3.zero;
     [SerializeField, Range(0f, 1f)] private float exteriorWallAnchorOffsetCells = 0f;
@@ -65,16 +63,9 @@ public class GridScript : MonoBehaviour
     [SerializeField] private Vector3 topRightCornerLightRotation = Vector3.zero;
 
     [Header("Entry System")]
-    [SerializeField] private GameObject entryDoorPrefab;
-    [SerializeField] private GameObject entryAccessRoadPrefab;
-    [SerializeField] private Transform entryParent;
-    [SerializeField] private float entryY = 0f;
-    [SerializeField] private Vector3 entryDoorOffset = Vector3.zero;
-    [SerializeField] private Vector3 entryAccessOffset = Vector3.zero;
-    [SerializeField] private Vector3 entryDoorRotation = Vector3.zero;
-    [SerializeField] private Vector3 entryAccessRotation = Vector3.zero;
     [SerializeField] private bool hasEntryPoint;
-    [SerializeField] private int entryRightSideRow;
+    [SerializeField] public EntrySide entrySide = EntrySide.None;
+    [SerializeField] private int entryIndex;
     
     [Header("Visuals")]
     public Color gridColor = Color.green;
@@ -85,6 +76,7 @@ public class GridScript : MonoBehaviour
     // Data storage for occupied cells
     private HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
     private HashSet<Vector2Int> roadCells = new HashSet<Vector2Int>();
+    private HashSet<EntrySide> purchasedChunks = new HashSet<EntrySide>();
     private bool hasPreview;
     private int previewX;
     private int previewZ;
@@ -93,12 +85,8 @@ public class GridScript : MonoBehaviour
     private bool previewRequiresFullRoadSide;
     private readonly List<GameObject> spawnedExteriorWalls = new List<GameObject>();
     private readonly List<GameObject> spawnedCornerLights = new List<GameObject>();
-    private readonly List<GameObject> spawnedEntryObjects = new List<GameObject>();
     private Transform runtimeWallsParent;
     private Transform runtimeCornerLightsParent;
-    private Transform runtimeEntryParent;
-    private bool hasMarkedEntryRoadCell;
-    private Vector2Int markedEntryRoadCell;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void BootstrapPerimeterVisualsAfterSceneLoad()
@@ -150,7 +138,52 @@ public class GridScript : MonoBehaviour
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
-        RebuildEntryObjects();
+    }
+
+    public bool HasEntryPointConfigured => hasEntryPoint;
+
+    public int CurrentChunkPurchaseCost => Mathf.Max(0, chunkPurchaseCost);
+
+    public bool SetEntryOnCell(int gridX, int gridZ)
+    {
+        if (gridSize <= 0 || gridX < 0 || gridX >= gridSize || gridZ < 0 || gridZ >= gridSize)
+        {
+            return false;
+        }
+
+        bool isLeftEdge = (gridX == 0);
+        bool isRightEdge = (gridX == gridSize - 1);
+        bool isBottomEdge = (gridZ == 0);
+        bool isTopEdge = (gridZ == gridSize - 1);
+
+        if (isRightEdge)
+        {
+            entrySide = EntrySide.Right;
+            entryIndex = gridZ;
+        }
+        else if (isLeftEdge)
+        {
+            entrySide = EntrySide.Left;
+            entryIndex = gridZ;
+        }
+        else if (isTopEdge)
+        {
+            entrySide = EntrySide.Top;
+            entryIndex = gridX;
+        }
+        else if (isBottomEdge)
+        {
+            entrySide = EntrySide.Bottom;
+            entryIndex = gridX;
+        }
+        else
+        {
+            return false;
+        }
+
+        hasEntryPoint = true;
+        EnsurePerimeterVisuals();
+        return true;
     }
 
     public bool SetEntryOnRightSide(int oneBasedRow)
@@ -160,7 +193,8 @@ public class GridScript : MonoBehaviour
             return false;
         }
 
-        entryRightSideRow = Mathf.Clamp(oneBasedRow - 1, 0, gridSize - 1);
+        entrySide = EntrySide.Right;
+        entryIndex = Mathf.Clamp(oneBasedRow - 1, 0, gridSize - 1);
         hasEntryPoint = true;
         EnsurePerimeterVisuals();
         return true;
@@ -174,71 +208,187 @@ public class GridScript : MonoBehaviour
             return false;
         }
 
-        worldPosition = GetEntryAccessWorldPosition();
+        int clampedIndex = Mathf.Clamp(entryIndex, 0, gridSize - 1);
+        Vector2Int cell = new Vector2Int(Mathf.Max(0, gridSize - 1), clampedIndex);
+
+        if (entrySide == EntrySide.Left)
+        {
+            cell = new Vector2Int(0, clampedIndex);
+        }
+        else if (entrySide == EntrySide.Top)
+        {
+            cell = new Vector2Int(clampedIndex, Mathf.Max(0, gridSize - 1));
+        }
+        else if (entrySide == EntrySide.Bottom)
+        {
+            cell = new Vector2Int(clampedIndex, 0);
+        }
+
+        worldPosition = CellToWorldCenter(cell);
         return true;
     }
 
-    public bool HasEntryPointConfigured => hasEntryPoint;
-
-    public int CurrentGridUpgradeCost => Mathf.Max(0, gridUpgradeCost);
-
-    public bool TryPurchaseGridUpgrade()
+    public bool TryGetEntryBuildCell(out Vector2Int cell)
     {
+        cell = default;
+
+        if (!hasEntryPoint || gridSize <= 0)
+        {
+            return false;
+        }
+
+        int clampedIndex = Mathf.Clamp(entryIndex, 0, gridSize - 1);
+        cell = new Vector2Int(Mathf.Max(0, gridSize - 1), clampedIndex);
+
+        if (entrySide == EntrySide.Left)
+        {
+            cell = new Vector2Int(0, clampedIndex);
+        }
+        else if (entrySide == EntrySide.Top)
+        {
+            cell = new Vector2Int(clampedIndex, Mathf.Max(0, gridSize - 1));
+        }
+        else if (entrySide == EntrySide.Bottom)
+        {
+            cell = new Vector2Int(clampedIndex, 0);
+        }
+
+        return true;
+    }
+
+    private bool IsChunkAvailable(EntrySide side)
+    {
+        // Right side always locked
+        if (side == EntrySide.Right)
+        {
+            return false;
+        }
+
+        // Can't purchase on entry side
+        if (hasEntryPoint && side == entrySide)
+        {
+            return false;
+        }
+
+        // Can't repurchase
+        if (purchasedChunks.Contains(side))
+        {
+            return false;
+        }
+
+        // At start, only purchase from the opposite direction of entry
+        // After that, only adjacent chunks (those that touch the expanded grid)
+        return true;
+    }
+
+    public bool TryPurchaseChunkAtWorldPosition(Vector3 worldPosition)
+    {
+        float worldSize = gridSize * cellSize;
+        float endX = startCorner.x + worldSize;
+        float endZ = startCorner.y + worldSize;
+
+        EntrySide side = EntrySide.None;
+        if (worldPosition.x < startCorner.x)
+        {
+            side = EntrySide.Left;
+        }
+        else if (worldPosition.x >= endX)
+        {
+            side = EntrySide.Right;
+        }
+        else if (worldPosition.z < startCorner.y)
+        {
+            side = EntrySide.Bottom;
+        }
+        else if (worldPosition.z >= endZ)
+        {
+            side = EntrySide.Top;
+        }
+
+        if (side == EntrySide.None || !IsChunkAvailable(side))
+        {
+            return false;
+        }
+
         if (ResourceManager.instance == null)
         {
             return false;
         }
 
-        int cost = Mathf.Max(0, gridUpgradeCost);
-        if (!ResourceManager.instance.SpendMoney(cost))
+        if (!ResourceManager.instance.SpendMoney(CurrentChunkPurchaseCost))
         {
             return false;
         }
 
-        float expansion = cellSize * 0.5f;
+        return TryPurchaseChunk(side);
+    }
 
-        float deltaX = -expansion;
-        float deltaZ = -expansion;
-
-        switch (lockedExpansionSide)
+    public bool TryPurchaseChunk(EntrySide side)
+    {
+        if (chunkSize <= 0 || !IsChunkAvailable(side))
         {
-            case LockedExpansionSide.Bottom:
-                deltaZ = -cellSize;
-                break;
-            case LockedExpansionSide.Top:
-                deltaZ = 0f;
-                break;
-            case LockedExpansionSide.Left:
-                deltaX = -cellSize;
-                break;
-            case LockedExpansionSide.Right:
-                deltaX = 0f;
-                break;
+            return false;
         }
 
+        float deltaX = 0f;
+        float deltaZ = 0f;
+        int addedSize = Mathf.Max(1, chunkSize);
+
+        switch (side)
+        {
+            case EntrySide.Left:
+                deltaX = -addedSize * cellSize;
+                break;
+            case EntrySide.Bottom:
+                deltaZ = -addedSize * cellSize;
+                break;
+            case EntrySide.Top:
+                break;
+            case EntrySide.Right:
+                return false;
+            default:
+                return false;
+        }
+
+        purchasedChunks.Add(side);
         startCorner += new Vector2(deltaX, deltaZ);
-        ShiftPlacedStructuresByDelta(new Vector3(deltaX, 0f, deltaZ));
-        gridSize = Mathf.Max(1, gridSize + 1);
-        gridUpgradeCost += Mathf.Max(0, gridUpgradeCostIncrease);
+        gridSize = Mathf.Max(1, gridSize + addedSize);
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildEntryObjects();
+        SpawnShaderPlaneForChunk(side);
         return true;
     }
 
-    private void ShiftPlacedStructuresByDelta(Vector3 worldDelta)
+    private void SpawnShaderPlaneForChunk(EntrySide side)
     {
-        BuildingInstance[] allBuildings = FindObjectsOfType<BuildingInstance>();
-        for (int i = 0; i < allBuildings.Length; i++)
+        if (shaderPlanePrefab == null)
         {
-            BuildingInstance building = allBuildings[i];
-            if (building == null)
-            {
-                continue;
-            }
-
-            building.transform.position += worldDelta;
+            return;
         }
+
+        float chunkWorldSize = Mathf.Max(1, chunkSize) * cellSize;
+        float currentWorldSize = (gridSize - chunkSize) * cellSize; // Size before this chunk was added
+        Vector3 spawnPosition = Vector3.zero;
+
+        switch (side)
+        {
+            case EntrySide.Left:
+                spawnPosition = new Vector3(startCorner.x + (chunkWorldSize * 0.5f), 0f, startCorner.y + (currentWorldSize * 0.5f));
+                break;
+            case EntrySide.Bottom:
+                spawnPosition = new Vector3(startCorner.x + (currentWorldSize * 0.5f), 0f, startCorner.y + (chunkWorldSize * 0.5f));
+                break;
+            case EntrySide.Top:
+                spawnPosition = new Vector3(startCorner.x + (currentWorldSize * 0.5f), 0f, startCorner.y + currentWorldSize + (chunkWorldSize * 0.5f));
+                break;
+            default:
+                return;
+        }
+
+        GameObject shaderPlane = Instantiate(shaderPlanePrefab, spawnPosition, Quaternion.identity, shaderPlaneParent);
+        shaderPlane.transform.localScale = new Vector3(chunkWorldSize / 10f, 1f, currentWorldSize / 10f);
     }
 
     private void ResetToStartingGrid()
@@ -246,14 +396,14 @@ public class GridScript : MonoBehaviour
         gridSize = Mathf.Max(1, startingGridSize);
         startCorner = startingStartCorner;
         hasEntryPoint = false;
-        hasMarkedEntryRoadCell = false;
-        markedEntryRoadCell = default;
+        entrySide = EntrySide.None;
+        entryIndex = 0;
         occupiedCells.Clear();
         roadCells.Clear();
+        purchasedChunks.Clear();
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
-        RebuildEntryObjects();
     }
 
     private void UpdateGroundPlaneScale()
@@ -305,10 +455,10 @@ public class GridScript : MonoBehaviour
 
         for (int z = 0; z < gridSize; z++)
         {
-            if (hasEntryPoint && z == Mathf.Clamp(entryRightSideRow, 0, gridSize - 1))
-            {
+            if (hasEntryPoint && entrySide == EntrySide.Left && z == entryIndex)
                 continue;
-            }
+            if (hasEntryPoint && entrySide == EntrySide.Right && z == entryIndex)
+                continue;
 
             float wallZ = startCorner.y + ((z + anchorOffset) * cellSize);
 
@@ -318,93 +468,22 @@ public class GridScript : MonoBehaviour
             Vector3 rightPos = new Vector3(endX, exteriorWallY, wallZ) + exteriorWallOffset + rightWallOffset;
             SpawnExteriorWall(rightPos, Quaternion.Euler(rightWallRotation));
         }
-    }
 
-    private void RebuildEntryObjects()
-    {
-        ClearEntryObjects();
-        UpdateEntryRoadCell();
-
-        if (!hasEntryPoint || gridSize <= 0)
+        for (int x = 0; x < gridSize; x++)
         {
-            return;
-        }
-
-        Transform parent = ResolveSpawnParent(entryParent, ref runtimeEntryParent, "Entry_Runtime");
-
-        if (entryDoorPrefab != null)
-        {
-            Vector3 doorPos = GetEntryDoorWorldPosition() + entryDoorOffset;
-            GameObject door = Instantiate(entryDoorPrefab, doorPos, Quaternion.Euler(entryDoorRotation), parent);
-            spawnedEntryObjects.Add(door);
-        }
-
-        if (entryAccessRoadPrefab != null)
-        {
-            Vector3 accessPos = GetEntryAccessWorldPosition() + entryAccessOffset;
-            GameObject access = Instantiate(entryAccessRoadPrefab, accessPos, Quaternion.Euler(entryAccessRotation), parent);
-            spawnedEntryObjects.Add(access);
-        }
-    }
-
-    private Vector3 GetEntryDoorWorldPosition()
-    {
-        float worldSize = gridSize * cellSize;
-        float endX = startCorner.x + worldSize;
-        int row = Mathf.Clamp(entryRightSideRow, 0, gridSize - 1);
-        float rowCenterZ = startCorner.y + ((row + 0.5f) * cellSize);
-        return new Vector3(endX, entryY, rowCenterZ);
-    }
-
-    private Vector3 GetEntryAccessWorldPosition()
-    {
-        int row = Mathf.Clamp(entryRightSideRow, 0, gridSize - 1);
-        int x = Mathf.Max(0, gridSize - 1);
-        return CellToWorldCenter(new Vector2Int(x, row)) + new Vector3(0f, entryY, 0f);
-    }
-
-    private void UpdateEntryRoadCell()
-    {
-        if (hasMarkedEntryRoadCell)
-        {
-            roadCells.Remove(markedEntryRoadCell);
-            occupiedCells.Remove(markedEntryRoadCell);
-            hasMarkedEntryRoadCell = false;
-        }
-
-        if (!hasEntryPoint || gridSize <= 0)
-        {
-            return;
-        }
-
-        Vector2Int entryCell = new Vector2Int(Mathf.Max(0, gridSize - 1), Mathf.Clamp(entryRightSideRow, 0, gridSize - 1));
-        roadCells.Add(entryCell);
-        occupiedCells.Add(entryCell);
-        markedEntryRoadCell = entryCell;
-        hasMarkedEntryRoadCell = true;
-    }
-
-    private void ClearEntryObjects()
-    {
-        for (int i = spawnedEntryObjects.Count - 1; i >= 0; i--)
-        {
-            GameObject entryObject = spawnedEntryObjects[i];
-            if (entryObject == null)
-            {
+            if (hasEntryPoint && entrySide == EntrySide.Bottom && x == entryIndex)
                 continue;
-            }
+            if (hasEntryPoint && entrySide == EntrySide.Top && x == entryIndex)
+                continue;
 
-            if (Application.isPlaying)
-            {
-                Destroy(entryObject);
-            }
-            else
-            {
-                DestroyImmediate(entryObject);
-            }
+            float wallX = startCorner.x + ((x + anchorOffset) * cellSize);
+
+            Vector3 bottomPos = new Vector3(wallX, exteriorWallY, startCorner.y) + exteriorWallOffset + bottomWallOffset;
+            SpawnExteriorWall(bottomPos, Quaternion.Euler(bottomWallRotation));
+
+            Vector3 topPos = new Vector3(wallX, exteriorWallY, endZ) + exteriorWallOffset + topWallOffset;
+            SpawnExteriorWall(topPos, Quaternion.Euler(topWallRotation));
         }
-
-        spawnedEntryObjects.Clear();
     }
 
     private void RebuildCornerLights()
@@ -768,6 +847,7 @@ public class GridScript : MonoBehaviour
         Gizmos.color = gridColor;
         
         // Calculate the far edges based on current size
+        float worldSize = gridSize * cellSize;
         float endX = startCorner.x + (gridSize * cellSize);
         float endZ = startCorner.y + (gridSize * cellSize);
 
@@ -786,6 +866,42 @@ public class GridScript : MonoBehaviour
                 new Vector3(startCorner.x, 0, startCorner.y + offset),
                 new Vector3(endX, 0, startCorner.y + offset)
             );
+        }
+
+        if (hasEntryPoint)
+        {
+            float chunkWorldSize = Mathf.Max(1, chunkSize) * cellSize;
+
+            // Draw Left chunk
+            if (entrySide != EntrySide.Left && EntrySide.Left != EntrySide.Right)
+            {
+                bool available = IsChunkAvailable(EntrySide.Left);
+                Gizmos.color = available ? new Color(1f, 0.5f, 0f, 0.22f) : new Color(0.2f, 0.4f, 1f, 0.22f); // Orange available, Blue locked
+                Gizmos.DrawCube(new Vector3(startCorner.x - (chunkWorldSize * 0.5f), 0.01f, startCorner.y + (worldSize * 0.5f)), new Vector3(chunkWorldSize * 0.95f, 0.02f, worldSize * 0.95f));
+            }
+
+            // Draw Right chunk (always blocked)
+            if (entrySide != EntrySide.Right)
+            {
+                Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.22f); // Red for blocked
+                Gizmos.DrawCube(new Vector3(endX + (chunkWorldSize * 0.5f), 0.01f, startCorner.y + (worldSize * 0.5f)), new Vector3(chunkWorldSize * 0.95f, 0.02f, worldSize * 0.95f));
+            }
+
+            // Draw Bottom chunk
+            if (entrySide != EntrySide.Bottom && EntrySide.Bottom != EntrySide.Right)
+            {
+                bool available = IsChunkAvailable(EntrySide.Bottom);
+                Gizmos.color = available ? new Color(1f, 0.5f, 0f, 0.22f) : new Color(0.2f, 0.4f, 1f, 0.22f); // Orange available, Blue locked
+                Gizmos.DrawCube(new Vector3(startCorner.x + (worldSize * 0.5f), 0.01f, startCorner.y - (chunkWorldSize * 0.5f)), new Vector3(worldSize * 0.95f, 0.02f, chunkWorldSize * 0.95f));
+            }
+
+            // Draw Top chunk
+            if (entrySide != EntrySide.Top && EntrySide.Top != EntrySide.Right)
+            {
+                bool available = IsChunkAvailable(EntrySide.Top);
+                Gizmos.color = available ? new Color(1f, 0.5f, 0f, 0.22f) : new Color(0.2f, 0.4f, 1f, 0.22f); // Orange available, Blue locked
+                Gizmos.DrawCube(new Vector3(startCorner.x + (worldSize * 0.5f), 0.01f, endZ + (chunkWorldSize * 0.5f)), new Vector3(worldSize * 0.95f, 0.02f, chunkWorldSize * 0.95f));
+            }
         }
 
         if (occupiedCells != null && occupiedCells.Count > 0)
@@ -843,5 +959,10 @@ public class GridScript : MonoBehaviour
                 Gizmos.DrawCube(cellCenter, size);
             }
         }
+    }
+
+    private void RebuildEntryObjects()
+    {
+        // Entry prefabs are no longer spawned here; the door is handled by the scene setup/UI.
     }
 }

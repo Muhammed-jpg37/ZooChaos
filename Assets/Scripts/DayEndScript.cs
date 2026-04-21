@@ -47,6 +47,11 @@ public class DayEndScript : MonoBehaviour
             playerMovementController = FindObjectOfType<PlayerMovementController>();
         }
 
+        if (playerMovementController != null)
+        {
+            playerMovementController.SetMovementEnabled(false);
+        }
+
         waitingForEntrySelection = gridScript != null && !gridScript.HasEntryPointConfigured;
         if (waitingForEntrySelection)
         {
@@ -55,11 +60,6 @@ public class DayEndScript : MonoBehaviour
             if (resourceManager != null)
             {
                 resourceManager.SetCustomerSpawningEnabled(false);
-            }
-
-            if (playerMovementController != null)
-            {
-                playerMovementController.SetMovementEnabled(false);
             }
 
             UpdateClockUI();
@@ -87,6 +87,12 @@ public class DayEndScript : MonoBehaviour
             if (gridScript != null && gridScript.HasEntryPointConfigured)
             {
                 waitingForEntrySelection = false;
+
+                if (playerMovementController != null)
+                {
+                    playerMovementController.SetMovementEnabled(true);
+                }
+
                 BeginNewDay();
             }
 

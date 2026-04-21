@@ -49,9 +49,11 @@ public class BuildConstruction : MonoBehaviour
             return false;
         }
 
-        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI() && TryGetGridPositionFromMouse(out int _, out int mouseGridY))
+        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI() && TryGetGridPositionFromMouse(out int mouseGridX, out int mouseGridY))
         {
-            gridScript.SetEntryOnRightSide(mouseGridY);
+            int internalX = GridToInternalIndex(mouseGridX);
+            int internalY = GridToInternalIndex(mouseGridY);
+            gridScript.SetEntryOnCell(internalX, internalY);
             databaseIndex = -1;
             gridScript.ClearPlacementPreview();
             ClearBuildingPreviewVisual();
@@ -59,6 +61,56 @@ public class BuildConstruction : MonoBehaviour
         }
 
         return true;
+    }
+
+    private bool TryGetMouseWorldPosition(out Vector3 worldPosition)
+    {
+        worldPosition = Vector3.zero;
+
+        if (previewCamera == null)
+        {
+            previewCamera = Camera.main;
+            if (previewCamera == null)
+            {
+                return false;
+            }
+        }
+
+        Ray ray = previewCamera.ScreenPointToRay(Input.mousePosition);
+        if (Physics.Raycast(ray, out RaycastHit hit, previewRaycastDistance, previewSurfaceMask))
+        {
+            worldPosition = hit.point;
+            return true;
+        }
+
+        if (!useGridPlaneFallbackRaycast)
+        {
+            return false;
+        }
+
+        Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, fallbackGridPlaneY, 0f));
+        if (!gridPlane.Raycast(ray, out float enter))
+        {
+            return false;
+        }
+
+        worldPosition = ray.GetPoint(enter);
+        return true;
+    }
+
+    private bool TryHandleChunkPurchase(GridScript gridScript)
+    {
+        if (gridScript == null || databaseIndex > 0 || !Input.GetMouseButtonDown(0) || IsPointerOverUI())
+        {
+            return false;
+        }
+
+        if (!TryGetMouseWorldPosition(out Vector3 worldPosition))
+        {
+            return false;
+        }
+
+        return gridScript.TryPurchaseChunkAtWorldPosition(worldPosition);
     }
 
     private int GridToInternalIndex(int oneBasedIndex)
@@ -117,6 +169,11 @@ public class BuildConstruction : MonoBehaviour
     {
         GridScript gridScript = ResolveGridScript();
         if (TryHandleEntrySelection(gridScript))
+        {
+            return;
+        }
+
+        if (TryHandleChunkPurchase(gridScript))
         {
             return;
         }
@@ -223,13 +280,6 @@ public class BuildConstruction : MonoBehaviour
             return;
         }
 
-        if (IsWaitingForEntrySelection(gridScript))
-        {
-            gridScript.ClearPlacementPreview();
-            ClearBuildingPreviewVisual();
-            return;
-        }
-
         if (gridX < 1 || gridY < 1)
         {
             gridScript.ClearPlacementPreview();
@@ -285,11 +335,6 @@ public class BuildConstruction : MonoBehaviour
         GridScript gridScript = ResolveGridScript();
         if (gridScript == null) {
             Debug.LogWarning("GridScript instance is missing.");
-            return false;
-        }
-
-        if (IsWaitingForEntrySelection(gridScript))
-        {
             return false;
         }
 
@@ -511,6 +556,11 @@ public class BuildConstruction : MonoBehaviour
             return false;
         }
 
+        if (selectedType == BuySystemManager.BuildingType.Road && !IsRoadFootprintOnEntryCell(gridScript, internalGridX, internalGridY, width, depth))
+        {
+            return false;
+        }
+
         if (!gridScript.CanPlaceBuilding(internalGridX, internalGridY, width, depth))
         {
             return false;
@@ -667,7 +717,7 @@ public class BuildConstruction : MonoBehaviour
         List<Vector2Int> roadCells = gridScript.GetRoadCells();
         if (roadCells == null || roadCells.Count == 0)
         {
-            return true;
+            return IsRoadFootprintOnEntryCell(gridScript, gridX, gridZ, width, depth);
         }
 
         for (int x = 0; x < width; x++)
@@ -676,6 +726,27 @@ public class BuildConstruction : MonoBehaviour
             {
                 Vector2Int cell = new Vector2Int(gridX + x, gridZ + z);
                 if (HasAdjacentRoad(gridScript, cell))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsRoadFootprintOnEntryCell(GridScript gridScript, int gridX, int gridZ, int width, int depth)
+    {
+        if (gridScript == null || !gridScript.TryGetEntryBuildCell(out Vector2Int entryCell))
+        {
+            return false;
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int z = 0; z < depth; z++)
+            {
+                if (new Vector2Int(gridX + x, gridZ + z) == entryCell)
                 {
                     return true;
                 }
