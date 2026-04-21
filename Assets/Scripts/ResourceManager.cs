@@ -30,6 +30,7 @@ public class ResourceManager : MonoBehaviour
 
 	private readonly List<CustomerBehaviour> activeCustomers = new List<CustomerBehaviour>();
 	private float spawnTimer;
+	private GridScript cachedGridScript;
 
 	public int Money => money;
 	public float CustomerHappiness => customerHappiness;
@@ -67,6 +68,11 @@ public class ResourceManager : MonoBehaviour
 		}
 
 		if (!customerSpawningEnabled)
+		{
+			return;
+		}
+
+		if (!IsEntryReadyForGameplay())
 		{
 			return;
 		}
@@ -221,6 +227,11 @@ public class ResourceManager : MonoBehaviour
 		GridScript gridScript = FindGridScript();
 		if (gridScript != null)
 		{
+			if (gridScript.TryGetEntrySpawnPosition(out Vector3 entrySpawnPosition))
+			{
+				return entrySpawnPosition;
+			}
+
 			List<Vector2Int> roadCells = gridScript.GetRoadCells();
 			if (roadCells.Count > 0)
 			{
@@ -232,12 +243,29 @@ public class ResourceManager : MonoBehaviour
 		return transform.position;
 	}
 
+	private bool IsEntryReadyForGameplay()
+	{
+		GridScript gridScript = FindGridScript();
+		if (gridScript == null)
+		{
+			return true;
+		}
+
+		return gridScript.HasEntryPointConfigured;
+	}
+
 	private GridScript FindGridScript()
 	{
+		if (cachedGridScript != null)
+		{
+			return cachedGridScript;
+		}
+
 		GridScript activeGrid = FindObjectOfType<GridScript>();
 		if (activeGrid != null)
 		{
-			return activeGrid;
+			cachedGridScript = activeGrid;
+			return cachedGridScript;
 		}
 
 		GridScript[] allGrids = Resources.FindObjectsOfTypeAll<GridScript>();
@@ -254,7 +282,8 @@ public class ResourceManager : MonoBehaviour
 				continue;
 			}
 
-			return grid;
+			cachedGridScript = grid;
+			return cachedGridScript;
 		}
 
 		return null;

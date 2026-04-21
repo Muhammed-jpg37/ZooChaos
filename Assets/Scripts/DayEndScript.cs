@@ -29,22 +29,46 @@ public class DayEndScript : MonoBehaviour
     [SerializeField] private PlayerMovementController playerMovementController;
 
     private ResourceManager resourceManager;
+    private GridScript gridScript;
     private float elapsedDayTime;
     private int dayNumber = 1;
     private bool isDayRunning;
+    private bool waitingForEntrySelection;
 
     public bool IsDayRunning => isDayRunning;
 
     private void Start()
     {
         resourceManager = ResourceManager.instance;
+        gridScript = FindObjectOfType<GridScript>();
 
         if (playerMovementController == null)
         {
             playerMovementController = FindObjectOfType<PlayerMovementController>();
         }
 
-        BeginNewDay();
+        waitingForEntrySelection = gridScript != null && !gridScript.HasEntryPointConfigured;
+        if (waitingForEntrySelection)
+        {
+            SetBuildModeVisible(true);
+
+            if (resourceManager != null)
+            {
+                resourceManager.SetCustomerSpawningEnabled(false);
+            }
+
+            if (playerMovementController != null)
+            {
+                playerMovementController.SetMovementEnabled(false);
+            }
+
+            UpdateClockUI();
+        }
+        else
+        {
+            BeginNewDay();
+        }
+
         if (dayCounterText != null)
         {
             dayCounterText.text = $"Day {dayNumber}";
@@ -53,6 +77,22 @@ public class DayEndScript : MonoBehaviour
 
     private void Update()
     {
+        if (waitingForEntrySelection)
+        {
+            if (gridScript == null)
+            {
+                gridScript = FindObjectOfType<GridScript>();
+            }
+
+            if (gridScript != null && gridScript.HasEntryPointConfigured)
+            {
+                waitingForEntrySelection = false;
+                BeginNewDay();
+            }
+
+            return;
+        }
+
         if (!isDayRunning)
         {
             return;

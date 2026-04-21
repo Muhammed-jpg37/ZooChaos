@@ -17,6 +17,8 @@ public class BuildConstruction : MonoBehaviour
     [SerializeField] private Camera previewCamera;
     [SerializeField] private LayerMask previewSurfaceMask = ~0;
     [SerializeField] private float previewRaycastDistance = 2000f;
+    [SerializeField] private bool useGridPlaneFallbackRaycast = true;
+    [SerializeField] private float fallbackGridPlaneY = 0f;
     [SerializeField] private TMP_Text previewSizeText;
     [Header("Construction Effects")]
     [SerializeField] private GameObject constructionSmokePrefab;
@@ -35,9 +37,56 @@ public class BuildConstruction : MonoBehaviour
     private BuySystemManager.BuildingType previewType = BuySystemManager.BuildingType.None;
     private MaterialPropertyBlock previewPropertyBlock;
 
+    private bool IsWaitingForEntrySelection(GridScript gridScript)
+    {
+        return gridScript != null && !gridScript.HasEntryPointConfigured;
+    }
+
+    private bool TryHandleEntrySelection(GridScript gridScript)
+    {
+        if (!IsWaitingForEntrySelection(gridScript))
+        {
+            return false;
+        }
+
+        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI() && TryGetGridPositionFromMouse(out int _, out int mouseGridY))
+        {
+            gridScript.SetEntryOnRightSide(mouseGridY);
+            databaseIndex = -1;
+            gridScript.ClearPlacementPreview();
+            ClearBuildingPreviewVisual();
+            SetPreviewSizeText(string.Empty);
+        }
+
+        return true;
+    }
+
     private int GridToInternalIndex(int oneBasedIndex)
     {
         return oneBasedIndex - 1;
+    }
+
+    private GridScript ResolveGridScript()
+    {
+        GridScript activeGrid = FindObjectOfType<GridScript>();
+        if (activeGrid != null)
+        {
+            return activeGrid;
+        }
+
+        GridScript[] allGrids = Resources.FindObjectsOfTypeAll<GridScript>();
+        for (int i = 0; i < allGrids.Length; i++)
+        {
+            GridScript grid = allGrids[i];
+            if (grid == null || !grid.gameObject.scene.IsValid())
+            {
+                continue;
+            }
+
+            return grid;
+        }
+
+        return null;
     }
 
     private void GetFootprintOriginFromCenter(int centerGridX, int centerGridY, int width, int depth, out int originX, out int originY)
@@ -66,6 +115,12 @@ public class BuildConstruction : MonoBehaviour
 
     private void Update()
     {
+        GridScript gridScript = ResolveGridScript();
+        if (TryHandleEntrySelection(gridScript))
+        {
+            return;
+        }
+
         if (!followMouseCursor)
         {
             return;
@@ -99,7 +154,7 @@ public class BuildConstruction : MonoBehaviour
         }
         else
         {
-            GridScript gridScript = FindObjectOfType<GridScript>();
+            gridScript = ResolveGridScript();
             if (gridScript != null)
             {
                 gridScript.ClearPlacementPreview();
@@ -161,9 +216,16 @@ public class BuildConstruction : MonoBehaviour
 
     private void UpdatePlacementPreview()
     {
-        GridScript gridScript = FindObjectOfType<GridScript>();
+        GridScript gridScript = ResolveGridScript();
         if (gridScript == null)
         {
+            ClearBuildingPreviewVisual();
+            return;
+        }
+
+        if (IsWaitingForEntrySelection(gridScript))
+        {
+            gridScript.ClearPlacementPreview();
             ClearBuildingPreviewVisual();
             return;
         }
@@ -220,9 +282,14 @@ public class BuildConstruction : MonoBehaviour
             return false;
         }
 
-        GridScript gridScript = FindObjectOfType<GridScript>();
+        GridScript gridScript = ResolveGridScript();
         if (gridScript == null) {
             Debug.LogWarning("GridScript instance is missing.");
+            return false;
+        }
+
+        if (IsWaitingForEntrySelection(gridScript))
+        {
             return false;
         }
 
@@ -371,19 +438,35 @@ public class BuildConstruction : MonoBehaviour
             }
         }
 
-        GridScript gridScript = FindObjectOfType<GridScript>();
+        GridScript gridScript = ResolveGridScript();
         if (gridScript == null)
         {
             return false;
         }
 
         Ray ray = previewCamera.ScreenPointToRay(Input.mousePosition);
-        if (!Physics.Raycast(ray, out RaycastHit hit, previewRaycastDistance, previewSurfaceMask))
+        Vector3 hitWorldPoint;
+        if (Physics.Raycast(ray, out RaycastHit hit, previewRaycastDistance, previewSurfaceMask))
         {
-            return false;
+            hitWorldPoint = hit.point;
+        }
+        else
+        {
+            if (!useGridPlaneFallbackRaycast)
+            {
+                return false;
+            }
+
+            Plane gridPlane = new Plane(Vector3.up, new Vector3(0f, fallbackGridPlaneY, 0f));
+            if (!gridPlane.Raycast(ray, out float enter))
+            {
+                return false;
+            }
+
+            hitWorldPoint = ray.GetPoint(enter);
         }
 
-        Vector2Int internalCell = gridScript.WorldToCell(hit.point);
+        Vector2Int internalCell = gridScript.WorldToCell(hitWorldPoint);
         if (!gridScript.IsWithinGrid(internalCell))
         {
             return false;

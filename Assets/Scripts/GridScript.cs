@@ -3,6 +3,15 @@ using System.Collections.Generic;
 
 public class GridScript : MonoBehaviour
 {
+    private enum LockedExpansionSide
+    {
+        None,
+        Bottom,
+        Top,
+        Left,
+        Right
+    }
+
 [Header("Grid Layout")]
     [SerializeField] private int startingGridSize = 10;
     public int gridSize = 10; 
@@ -13,6 +22,7 @@ public class GridScript : MonoBehaviour
     [Header("Grid Upgrades")]
     [SerializeField] private int gridUpgradeCost = 100;
     [SerializeField] private int gridUpgradeCostIncrease = 50;
+    [SerializeField] private LockedExpansionSide lockedExpansionSide = LockedExpansionSide.None;
     [SerializeField] private Transform groundPlane;
     [SerializeField] private float groundPlaneBaseSize = 10f;
 
@@ -27,6 +37,7 @@ public class GridScript : MonoBehaviour
     [SerializeField] private Vector3 rightWallOffset = Vector3.zero;
     [SerializeField] private Vector3 bottomLeftCornerOffset = Vector3.zero;
     [SerializeField] private Vector3 bottomRightCornerOffset = Vector3.zero;
+    
     [SerializeField] private Vector3 topLeftCornerOffset = Vector3.zero;
     [SerializeField] private Vector3 topRightCornerOffset = Vector3.zero;
     [SerializeField, Range(0f, 1f)] private float exteriorWallAnchorOffsetCells = 0f;
@@ -52,6 +63,18 @@ public class GridScript : MonoBehaviour
     [SerializeField] private Vector3 bottomRightCornerLightRotation = Vector3.zero;
     [SerializeField] private Vector3 topLeftCornerLightRotation = Vector3.zero;
     [SerializeField] private Vector3 topRightCornerLightRotation = Vector3.zero;
+
+    [Header("Entry System")]
+    [SerializeField] private GameObject entryDoorPrefab;
+    [SerializeField] private GameObject entryAccessRoadPrefab;
+    [SerializeField] private Transform entryParent;
+    [SerializeField] private float entryY = 0f;
+    [SerializeField] private Vector3 entryDoorOffset = Vector3.zero;
+    [SerializeField] private Vector3 entryAccessOffset = Vector3.zero;
+    [SerializeField] private Vector3 entryDoorRotation = Vector3.zero;
+    [SerializeField] private Vector3 entryAccessRotation = Vector3.zero;
+    [SerializeField] private bool hasEntryPoint;
+    [SerializeField] private int entryRightSideRow;
     
     [Header("Visuals")]
     public Color gridColor = Color.green;
@@ -70,8 +93,12 @@ public class GridScript : MonoBehaviour
     private bool previewRequiresFullRoadSide;
     private readonly List<GameObject> spawnedExteriorWalls = new List<GameObject>();
     private readonly List<GameObject> spawnedCornerLights = new List<GameObject>();
+    private readonly List<GameObject> spawnedEntryObjects = new List<GameObject>();
     private Transform runtimeWallsParent;
     private Transform runtimeCornerLightsParent;
+    private Transform runtimeEntryParent;
+    private bool hasMarkedEntryRoadCell;
+    private Vector2Int markedEntryRoadCell;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void BootstrapPerimeterVisualsAfterSceneLoad()
@@ -123,7 +150,35 @@ public class GridScript : MonoBehaviour
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildEntryObjects();
     }
+
+    public bool SetEntryOnRightSide(int oneBasedRow)
+    {
+        if (gridSize <= 0)
+        {
+            return false;
+        }
+
+        entryRightSideRow = Mathf.Clamp(oneBasedRow - 1, 0, gridSize - 1);
+        hasEntryPoint = true;
+        EnsurePerimeterVisuals();
+        return true;
+    }
+
+    public bool TryGetEntrySpawnPosition(out Vector3 worldPosition)
+    {
+        worldPosition = Vector3.zero;
+        if (!hasEntryPoint || gridSize <= 0)
+        {
+            return false;
+        }
+
+        worldPosition = GetEntryAccessWorldPosition();
+        return true;
+    }
+
+    public bool HasEntryPointConfigured => hasEntryPoint;
 
     public int CurrentGridUpgradeCost => Mathf.Max(0, gridUpgradeCost);
 
@@ -140,6 +195,29 @@ public class GridScript : MonoBehaviour
             return false;
         }
 
+        float expansion = cellSize * 0.5f;
+
+        float deltaX = -expansion;
+        float deltaZ = -expansion;
+
+        switch (lockedExpansionSide)
+        {
+            case LockedExpansionSide.Bottom:
+                deltaZ = -cellSize;
+                break;
+            case LockedExpansionSide.Top:
+                deltaZ = 0f;
+                break;
+            case LockedExpansionSide.Left:
+                deltaX = -cellSize;
+                break;
+            case LockedExpansionSide.Right:
+                deltaX = 0f;
+                break;
+        }
+
+        startCorner += new Vector2(deltaX, deltaZ);
+        ShiftPlacedStructuresByDelta(new Vector3(deltaX, 0f, deltaZ));
         gridSize = Mathf.Max(1, gridSize + 1);
         gridUpgradeCost += Mathf.Max(0, gridUpgradeCostIncrease);
         UpdateGroundPlaneScale();
@@ -148,13 +226,34 @@ public class GridScript : MonoBehaviour
         return true;
     }
 
+    private void ShiftPlacedStructuresByDelta(Vector3 worldDelta)
+    {
+        BuildingInstance[] allBuildings = FindObjectsOfType<BuildingInstance>();
+        for (int i = 0; i < allBuildings.Length; i++)
+        {
+            BuildingInstance building = allBuildings[i];
+            if (building == null)
+            {
+                continue;
+            }
+
+            building.transform.position += worldDelta;
+        }
+    }
+
     private void ResetToStartingGrid()
     {
         gridSize = Mathf.Max(1, startingGridSize);
         startCorner = startingStartCorner;
+        hasEntryPoint = false;
+        hasMarkedEntryRoadCell = false;
+        markedEntryRoadCell = default;
+        occupiedCells.Clear();
+        roadCells.Clear();
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildEntryObjects();
     }
 
     private void UpdateGroundPlaneScale()
@@ -206,6 +305,11 @@ public class GridScript : MonoBehaviour
 
         for (int z = 0; z < gridSize; z++)
         {
+            if (hasEntryPoint && z == Mathf.Clamp(entryRightSideRow, 0, gridSize - 1))
+            {
+                continue;
+            }
+
             float wallZ = startCorner.y + ((z + anchorOffset) * cellSize);
 
             Vector3 leftPos = new Vector3(startCorner.x, exteriorWallY, wallZ) + exteriorWallOffset + leftWallOffset;
@@ -214,6 +318,93 @@ public class GridScript : MonoBehaviour
             Vector3 rightPos = new Vector3(endX, exteriorWallY, wallZ) + exteriorWallOffset + rightWallOffset;
             SpawnExteriorWall(rightPos, Quaternion.Euler(rightWallRotation));
         }
+    }
+
+    private void RebuildEntryObjects()
+    {
+        ClearEntryObjects();
+        UpdateEntryRoadCell();
+
+        if (!hasEntryPoint || gridSize <= 0)
+        {
+            return;
+        }
+
+        Transform parent = ResolveSpawnParent(entryParent, ref runtimeEntryParent, "Entry_Runtime");
+
+        if (entryDoorPrefab != null)
+        {
+            Vector3 doorPos = GetEntryDoorWorldPosition() + entryDoorOffset;
+            GameObject door = Instantiate(entryDoorPrefab, doorPos, Quaternion.Euler(entryDoorRotation), parent);
+            spawnedEntryObjects.Add(door);
+        }
+
+        if (entryAccessRoadPrefab != null)
+        {
+            Vector3 accessPos = GetEntryAccessWorldPosition() + entryAccessOffset;
+            GameObject access = Instantiate(entryAccessRoadPrefab, accessPos, Quaternion.Euler(entryAccessRotation), parent);
+            spawnedEntryObjects.Add(access);
+        }
+    }
+
+    private Vector3 GetEntryDoorWorldPosition()
+    {
+        float worldSize = gridSize * cellSize;
+        float endX = startCorner.x + worldSize;
+        int row = Mathf.Clamp(entryRightSideRow, 0, gridSize - 1);
+        float rowCenterZ = startCorner.y + ((row + 0.5f) * cellSize);
+        return new Vector3(endX, entryY, rowCenterZ);
+    }
+
+    private Vector3 GetEntryAccessWorldPosition()
+    {
+        int row = Mathf.Clamp(entryRightSideRow, 0, gridSize - 1);
+        int x = Mathf.Max(0, gridSize - 1);
+        return CellToWorldCenter(new Vector2Int(x, row)) + new Vector3(0f, entryY, 0f);
+    }
+
+    private void UpdateEntryRoadCell()
+    {
+        if (hasMarkedEntryRoadCell)
+        {
+            roadCells.Remove(markedEntryRoadCell);
+            occupiedCells.Remove(markedEntryRoadCell);
+            hasMarkedEntryRoadCell = false;
+        }
+
+        if (!hasEntryPoint || gridSize <= 0)
+        {
+            return;
+        }
+
+        Vector2Int entryCell = new Vector2Int(Mathf.Max(0, gridSize - 1), Mathf.Clamp(entryRightSideRow, 0, gridSize - 1));
+        roadCells.Add(entryCell);
+        occupiedCells.Add(entryCell);
+        markedEntryRoadCell = entryCell;
+        hasMarkedEntryRoadCell = true;
+    }
+
+    private void ClearEntryObjects()
+    {
+        for (int i = spawnedEntryObjects.Count - 1; i >= 0; i--)
+        {
+            GameObject entryObject = spawnedEntryObjects[i];
+            if (entryObject == null)
+            {
+                continue;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(entryObject);
+            }
+            else
+            {
+                DestroyImmediate(entryObject);
+            }
+        }
+
+        spawnedEntryObjects.Clear();
     }
 
     private void RebuildCornerLights()
