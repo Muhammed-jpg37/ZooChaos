@@ -12,7 +12,9 @@ public class WaterWayPuzzle : MonoBehaviour
         public bool isStart;
         public bool isEnd;
         public Image uiImage;
+        public Image clickImage;
         public Color originalColor;
+        public Color clickOriginalColor;
     }
 
     [SerializeField] private int gridWidth = 5;
@@ -30,7 +32,7 @@ public class WaterWayPuzzle : MonoBehaviour
     private Color pathColor = Color.blue;
     private Color startColor = new Color(0, 1, 0, 1); // Green
     private Color endColor = new Color(1, 0, 0, 1); // Red
-    private Color playerTraceColor = new Color(0.5f, 0.8f, 1, 1); // Light blue
+    private Color playerTraceColor = Color.blue;
     private Color correctTraceColor = new Color(0.2f, 0.8f, 0.2f, 1); // Light green
 
     private bool isActive = false;
@@ -136,6 +138,13 @@ public class WaterWayPuzzle : MonoBehaviour
 
                 grid[x, y].uiImage = nodeImage;
                 grid[x, y].originalColor = Color.white;
+                grid[x, y].clickImage = GetChildImage(nodeObj, nodeImage);
+                if (grid[x, y].clickImage == null)
+                {
+                    grid[x, y].clickImage = nodeImage;
+                }
+
+                grid[x, y].clickOriginalColor = grid[x, y].clickImage.color;
 
                 if (new Vector2Int(x, y) == startPos)
                 {
@@ -174,6 +183,21 @@ public class WaterWayPuzzle : MonoBehaviour
                 btn.onClick.AddListener(() => OnNodeClicked(pos));
             }
         }
+    }
+
+    private Image GetChildImage(GameObject nodeObj, Image rootImage)
+    {
+        Image[] images = nodeObj.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < images.Length; i++)
+        {
+            Image image = images[i];
+            if (image != null && image != rootImage)
+            {
+                return image;
+            }
+        }
+
+        return null;
     }
 
     private void GenerateRandomPath()
@@ -439,6 +463,11 @@ public class WaterWayPuzzle : MonoBehaviour
                     grid[x, y].uiImage.color = Color.white;
                 else
                     grid[x, y].uiImage.color = new Color(0.7f, 0.7f, 0.7f, 1);
+
+                if (grid[x, y].clickImage != null)
+                {
+                    grid[x, y].clickImage.color = grid[x, y].clickOriginalColor;
+                }
             }
         }
 
@@ -448,7 +477,10 @@ public class WaterWayPuzzle : MonoBehaviour
             Vector2Int pos = playerPath[i];
             if (pos != startPos && pos != endPos)
             {
-                grid[pos.x, pos.y].uiImage.color = playerTraceColor;
+                if (grid[pos.x, pos.y].clickImage != null)
+                {
+                    grid[pos.x, pos.y].clickImage.color = playerTraceColor;
+                }
             }
         }
     }
@@ -470,7 +502,10 @@ public class WaterWayPuzzle : MonoBehaviour
         {
             if (pos != startPos && pos != endPos)
             {
-                grid[pos.x, pos.y].uiImage.color = correctTraceColor;
+                if (grid[pos.x, pos.y].clickImage != null)
+                {
+                    grid[pos.x, pos.y].clickImage.color = correctTraceColor;
+                }
             }
         }
 

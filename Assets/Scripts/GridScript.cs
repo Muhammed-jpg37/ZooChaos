@@ -15,6 +15,43 @@ public class GridScript : MonoBehaviour
     [SerializeField] private int gridUpgradeCostIncrease = 50;
     [SerializeField] private Transform groundPlane;
     [SerializeField] private float groundPlaneBaseSize = 10f;
+
+    [Header("Perimeter Walls")]
+    [SerializeField] private GameObject exteriorWallPrefab;
+    [SerializeField] private Transform exteriorWallParent;
+    [SerializeField] private float exteriorWallY = 0f;
+    [SerializeField] private Vector3 exteriorWallOffset = Vector3.zero;
+    [SerializeField] private Vector3 bottomWallOffset = Vector3.zero;
+    [SerializeField] private Vector3 topWallOffset = Vector3.zero;
+    [SerializeField] private Vector3 leftWallOffset = Vector3.zero;
+    [SerializeField] private Vector3 rightWallOffset = Vector3.zero;
+    [SerializeField] private Vector3 bottomLeftCornerOffset = Vector3.zero;
+    [SerializeField] private Vector3 bottomRightCornerOffset = Vector3.zero;
+    [SerializeField] private Vector3 topLeftCornerOffset = Vector3.zero;
+    [SerializeField] private Vector3 topRightCornerOffset = Vector3.zero;
+    [SerializeField, Range(0f, 1f)] private float exteriorWallAnchorOffsetCells = 0f;
+    [SerializeField] private Vector3 bottomWallRotation = Vector3.zero;
+    [SerializeField] private Vector3 topWallRotation = new Vector3(0f, 180f, 0f);
+    [SerializeField] private Vector3 leftWallRotation = new Vector3(0f, 90f, 0f);
+    [SerializeField] private Vector3 rightWallRotation = new Vector3(0f, -90f, 0f);
+    [SerializeField] private Vector3 bottomLeftCornerRotation = Vector3.zero;
+    [SerializeField] private Vector3 bottomRightCornerRotation = new Vector3(0f, 90f, 0f);
+    [SerializeField] private Vector3 topLeftCornerRotation = new Vector3(0f, -90f, 0f);
+    [SerializeField] private Vector3 topRightCornerRotation = new Vector3(0f, 180f, 0f);
+
+    [Header("Corner Lights")]
+    [SerializeField] private GameObject cornerLightPrefab;
+    [SerializeField] private Transform cornerLightParent;
+    [SerializeField] private float cornerLightY = 0f;
+    [SerializeField] private Vector3 cornerLightOffset = Vector3.zero;
+    [SerializeField] private Vector3 bottomLeftCornerLightOffset = Vector3.zero;
+    [SerializeField] private Vector3 bottomRightCornerLightOffset = Vector3.zero;
+    [SerializeField] private Vector3 topLeftCornerLightOffset = Vector3.zero;
+    [SerializeField] private Vector3 topRightCornerLightOffset = Vector3.zero;
+    [SerializeField] private Vector3 bottomLeftCornerLightRotation = Vector3.zero;
+    [SerializeField] private Vector3 bottomRightCornerLightRotation = Vector3.zero;
+    [SerializeField] private Vector3 topLeftCornerLightRotation = Vector3.zero;
+    [SerializeField] private Vector3 topRightCornerLightRotation = Vector3.zero;
     
     [Header("Visuals")]
     public Color gridColor = Color.green;
@@ -31,10 +68,41 @@ public class GridScript : MonoBehaviour
     private int previewWidth = 1;
     private int previewDepth = 1;
     private bool previewRequiresFullRoadSide;
+    private readonly List<GameObject> spawnedExteriorWalls = new List<GameObject>();
+    private readonly List<GameObject> spawnedCornerLights = new List<GameObject>();
+    private Transform runtimeWallsParent;
+    private Transform runtimeCornerLightsParent;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void BootstrapPerimeterVisualsAfterSceneLoad()
+    {
+        GridScript[] allGrids = Resources.FindObjectsOfTypeAll<GridScript>();
+        for (int i = 0; i < allGrids.Length; i++)
+        {
+            GridScript grid = allGrids[i];
+            if (grid == null || !grid.gameObject.scene.IsValid())
+            {
+                continue;
+            }
+
+            grid.EnsurePerimeterVisuals();
+        }
+    }
 
     private void Awake()
     {
         ResetToStartingGrid();
+        EnsurePerimeterVisuals();
+    }
+
+    private void Start()
+    {
+        EnsurePerimeterVisuals();
+    }
+
+    private void OnEnable()
+    {
+        EnsurePerimeterVisuals();
     }
 
     private void OnValidate()
@@ -43,6 +111,18 @@ public class GridScript : MonoBehaviour
         {
             UpdateGroundPlaneScale();
         }
+
+        if (Application.isPlaying)
+        {
+            EnsurePerimeterVisuals();
+        }
+    }
+
+    public void EnsurePerimeterVisuals()
+    {
+        UpdateGroundPlaneScale();
+        RebuildExteriorWalls();
+        RebuildCornerLights();
     }
 
     public int CurrentGridUpgradeCost => Mathf.Max(0, gridUpgradeCost);
@@ -63,6 +143,8 @@ public class GridScript : MonoBehaviour
         gridSize = Mathf.Max(1, gridSize + 1);
         gridUpgradeCost += Mathf.Max(0, gridUpgradeCostIncrease);
         UpdateGroundPlaneScale();
+        RebuildExteriorWalls();
+        RebuildCornerLights();
         return true;
     }
 
@@ -71,6 +153,8 @@ public class GridScript : MonoBehaviour
         gridSize = Mathf.Max(1, startingGridSize);
         startCorner = startingStartCorner;
         UpdateGroundPlaneScale();
+        RebuildExteriorWalls();
+        RebuildCornerLights();
     }
 
     private void UpdateGroundPlaneScale()
@@ -93,6 +177,158 @@ public class GridScript : MonoBehaviour
             startCorner.y + (worldSize * 0.5f)
         );
         groundPlane.position = anchoredPosition;
+    }
+
+    private void RebuildExteriorWalls()
+    {
+        ClearExteriorWalls();
+
+        if (exteriorWallPrefab == null)
+        {
+            return;
+        }
+
+        float worldSize = gridSize * cellSize;
+        float endX = startCorner.x + worldSize;
+        float endZ = startCorner.y + worldSize;
+        float anchorOffset = Mathf.Clamp01(exteriorWallAnchorOffsetCells);
+
+        for (int x = 0; x < gridSize; x++)
+        {
+            float wallX = startCorner.x + ((x + anchorOffset) * cellSize);
+
+            Vector3 bottomPos = new Vector3(wallX, exteriorWallY, startCorner.y) + exteriorWallOffset + bottomWallOffset;
+            SpawnExteriorWall(bottomPos, Quaternion.Euler(bottomWallRotation));
+
+            Vector3 topPos = new Vector3(wallX, exteriorWallY, endZ) + exteriorWallOffset + topWallOffset;
+            SpawnExteriorWall(topPos, Quaternion.Euler(topWallRotation));
+        }
+
+        for (int z = 0; z < gridSize; z++)
+        {
+            float wallZ = startCorner.y + ((z + anchorOffset) * cellSize);
+
+            Vector3 leftPos = new Vector3(startCorner.x, exteriorWallY, wallZ) + exteriorWallOffset + leftWallOffset;
+            SpawnExteriorWall(leftPos, Quaternion.Euler(leftWallRotation));
+
+            Vector3 rightPos = new Vector3(endX, exteriorWallY, wallZ) + exteriorWallOffset + rightWallOffset;
+            SpawnExteriorWall(rightPos, Quaternion.Euler(rightWallRotation));
+        }
+    }
+
+    private void RebuildCornerLights()
+    {
+        ClearCornerLights();
+
+        if (cornerLightPrefab == null)
+        {
+            return;
+        }
+
+        float worldSize = gridSize * cellSize;
+        float endX = startCorner.x + worldSize;
+        float endZ = startCorner.y + worldSize;
+
+        Vector3 bottomLeftPos = new Vector3(startCorner.x, cornerLightY, startCorner.y)
+            + cornerLightOffset
+            + bottomLeftCornerLightOffset;
+        SpawnCornerLight(bottomLeftPos, Quaternion.Euler(bottomLeftCornerLightRotation));
+
+        Vector3 bottomRightPos = new Vector3(endX, cornerLightY, startCorner.y)
+            + cornerLightOffset
+            + bottomRightCornerLightOffset;
+        SpawnCornerLight(bottomRightPos, Quaternion.Euler(bottomRightCornerLightRotation));
+
+        Vector3 topLeftPos = new Vector3(startCorner.x, cornerLightY, endZ)
+            + cornerLightOffset
+            + topLeftCornerLightOffset;
+        SpawnCornerLight(topLeftPos, Quaternion.Euler(topLeftCornerLightRotation));
+
+        Vector3 topRightPos = new Vector3(endX, cornerLightY, endZ)
+            + cornerLightOffset
+            + topRightCornerLightOffset;
+        SpawnCornerLight(topRightPos, Quaternion.Euler(topRightCornerLightRotation));
+    }
+
+    private void SpawnCornerLight(Vector3 position, Quaternion rotation)
+    {
+        Transform parent = ResolveSpawnParent(cornerLightParent, ref runtimeCornerLightsParent, "CornerLights_Runtime");
+        GameObject lightObject = Instantiate(cornerLightPrefab, position, rotation, parent);
+        spawnedCornerLights.Add(lightObject);
+    }
+
+    private void ClearCornerLights()
+    {
+        for (int i = spawnedCornerLights.Count - 1; i >= 0; i--)
+        {
+            GameObject lightObject = spawnedCornerLights[i];
+            if (lightObject == null)
+            {
+                continue;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(lightObject);
+            }
+            else
+            {
+                DestroyImmediate(lightObject);
+            }
+        }
+
+        spawnedCornerLights.Clear();
+    }
+
+    private void SpawnExteriorWall(Vector3 position, Quaternion rotation)
+    {
+        Transform parent = ResolveSpawnParent(exteriorWallParent, ref runtimeWallsParent, "PerimeterWalls_Runtime");
+        GameObject wall = Instantiate(exteriorWallPrefab, position, rotation, parent);
+        spawnedExteriorWalls.Add(wall);
+    }
+
+    private Transform ResolveSpawnParent(Transform configuredParent, ref Transform runtimeParentCache, string runtimeRootName)
+    {
+        if (configuredParent != null && configuredParent.gameObject.activeInHierarchy)
+        {
+            return configuredParent;
+        }
+
+        if (runtimeParentCache == null)
+        {
+            GameObject runtimeRoot = GameObject.Find(runtimeRootName);
+            if (runtimeRoot == null)
+            {
+                runtimeRoot = new GameObject(runtimeRootName);
+            }
+
+            runtimeParentCache = runtimeRoot.transform;
+        }
+
+        return runtimeParentCache;
+    }
+
+    private void ClearExteriorWalls()
+    {
+        for (int i = spawnedExteriorWalls.Count - 1; i >= 0; i--)
+        {
+            GameObject wall = spawnedExteriorWalls[i];
+            if (wall == null)
+            {
+                continue;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(wall);
+            }
+            else
+            {
+                DestroyImmediate(wall);
+            }
+        }
+
+        spawnedExteriorWalls.Clear();
     }
 
     public void SetPlacementPreview(int gridX, int gridZ, int width, int depth, bool requiresFullRoadSide = false)
