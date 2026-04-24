@@ -14,7 +14,12 @@ public class GridScript : MonoBehaviour
 
 [Header("Grid Layout")]
     [SerializeField] private int startingGridSize = 10;
-    public int gridSize = 10; 
+    public int gridSize = 10;
+    [SerializeField] private int gridWidth = 10;
+    [SerializeField] private int gridHeight = 10;
+    [SerializeField] private int coreGridSize = 10;
+    [SerializeField] private int coreOriginX;
+    [SerializeField] private int coreOriginZ;
     public float cellSize = 1f;
     [SerializeField] private Vector2 startingStartCorner = new Vector2(127, 66);
     public Vector2 startCorner = new Vector2(-5f, -5f); // Bottom-Left Anchor
@@ -76,7 +81,11 @@ public class GridScript : MonoBehaviour
     // Data storage for occupied cells
     private HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
     private HashSet<Vector2Int> roadCells = new HashSet<Vector2Int>();
+    private HashSet<Vector2Int> unlockedCells = new HashSet<Vector2Int>();
     private HashSet<EntrySide> purchasedChunks = new HashSet<EntrySide>();
+    private HashSet<Vector2Int> purchasedChunkCoords = new HashSet<Vector2Int>();
+    private int minChunkX;
+    private int minChunkZ;
     private bool hasPreview;
     private int previewX;
     private int previewZ;
@@ -86,6 +95,7 @@ public class GridScript : MonoBehaviour
     private readonly List<GameObject> spawnedExteriorWalls = new List<GameObject>();
     private readonly List<GameObject> spawnedCornerLights = new List<GameObject>();
     private Transform runtimeWallsParent;
+    
     private Transform runtimeCornerLightsParent;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -122,6 +132,35 @@ public class GridScript : MonoBehaviour
 
     private void OnValidate()
     {
+        startingGridSize = Mathf.Max(1, startingGridSize);
+        coreGridSize = Mathf.Max(1, coreGridSize);
+
+        // Keep newly added dimensions populated for existing serialized scenes/prefabs.
+        if (gridWidth <= 0)
+        {
+            gridWidth = Mathf.Max(1, gridSize);
+        }
+
+        if (gridHeight <= 0)
+        {
+            gridHeight = Mathf.Max(1, gridSize);
+        }
+
+        coreOriginX = Mathf.Clamp(coreOriginX, 0, Mathf.Max(0, gridWidth - 1));
+        coreOriginZ = Mathf.Clamp(coreOriginZ, 0, Mathf.Max(0, gridHeight - 1));
+
+        if (unlockedCells == null)
+        {
+            unlockedCells = new HashSet<Vector2Int>();
+        }
+
+        if (unlockedCells.Count == 0)
+        {
+            UnlockRect(0, 0, gridWidth, gridHeight);
+        }
+
+        SyncLegacyGridSize();
+
         if (groundPlane != null)
         {
             UpdateGroundPlaneScale();
@@ -144,17 +183,268 @@ public class GridScript : MonoBehaviour
 
     public int CurrentChunkPurchaseCost => Mathf.Max(0, chunkPurchaseCost);
 
+    public int CurrentGridWidth => Mathf.Max(1, gridWidth);
+
+    public int CurrentGridHeight => Mathf.Max(1, gridHeight);
+
+    private void SyncLegacyGridSize()
+    {
+        gridSize = Mathf.Max(CurrentGridWidth, CurrentGridHeight);
+    }
+
+    private void UnlockRect(int startX, int startZ, int width, int height)
+    {
+        for (int x = 0; x < Mathf.Max(1, width); x++)
+        {
+            for (int z = 0; z < Mathf.Max(1, height); z++)
+            {
+                unlockedCells.Add(new Vector2Int(startX + x, startZ + z));
+            }
+        }
+    }
+
+    private void ShiftCellSet(HashSet<Vector2Int> cells, int deltaX, int deltaZ)
+    {
+        if (cells == null || cells.Count == 0)
+        {
+            return;
+        }
+
+        HashSet<Vector2Int> shifted = new HashSet<Vector2Int>();
+        foreach (Vector2Int cell in cells)
+        {
+            shifted.Add(new Vector2Int(cell.x + deltaX, cell.y + deltaZ));
+        }
+
+        cells.Clear();
+        foreach (Vector2Int cell in shifted)
+        {
+            cells.Add(cell);
+        }
+    }
+
+    private void ShiftGridCellData(int deltaX, int deltaZ)
+    {
+        ShiftCellSet(unlockedCells, deltaX, deltaZ);
+        ShiftCellSet(occupiedCells, deltaX, deltaZ);
+        ShiftCellSet(roadCells, deltaX, deltaZ);
+
+        if (hasPreview)
+        {
+            previewX += deltaX;
+            previewZ += deltaZ;
+        }
+    }
+
+    private bool IsCellUnlocked(int gridX, int gridZ)
+    {
+        return unlockedCells.Contains(new Vector2Int(gridX, gridZ));
+    }
+
+    private static Vector2Int SideToChunkOffset(EntrySide side)
+    {
+        switch (side)
+        {
+            case EntrySide.Left:
+                return new Vector2Int(-1, 0);
+            case EntrySide.Right:
+                return new Vector2Int(1, 0);
+            case EntrySide.Bottom:
+                return new Vector2Int(0, -1);
+            case EntrySide.Top:
+                return new Vector2Int(0, 1);
+            default:
+                return Vector2Int.zero;
+        }
+    }
+
+    private bool IsChunkAdjacentToPurchased(Vector2Int chunkCoord)
+    {
+        Vector2Int[] neighbors =
+        {
+            chunkCoord + Vector2Int.left,
+            chunkCoord + Vector2Int.right,
+            chunkCoord + Vector2Int.up,
+            chunkCoord + Vector2Int.down
+        };
+
+        for (int i = 0; i < neighbors.Length; i++)
+        {
+            if (purchasedChunkCoords.Contains(neighbors[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void GetPurchasedChunkBounds(out int minX, out int maxX, out int minZ, out int maxZ)
+    {
+        minX = int.MaxValue;
+        maxX = int.MinValue;
+        minZ = int.MaxValue;
+        maxZ = int.MinValue;
+
+        foreach (Vector2Int chunk in purchasedChunkCoords)
+        {
+            minX = Mathf.Min(minX, chunk.x);
+            maxX = Mathf.Max(maxX, chunk.x);
+            minZ = Mathf.Min(minZ, chunk.y);
+            maxZ = Mathf.Max(maxZ, chunk.y);
+        }
+
+        if (minX == int.MaxValue)
+        {
+            minX = 0;
+            maxX = 0;
+            minZ = 0;
+            maxZ = 0;
+            Debug.Log("I am so sorry you had to see this. Purchased chunks are empty.");
+        }
+    }
+
+    private bool IsBlockedByEntrySide(Vector2Int chunkCoord)
+    {
+        if (!hasEntryPoint || entrySide == EntrySide.None)
+        {
+            return false;
+        }
+
+        GetPurchasedChunkBounds(out int minX, out int maxX, out int minZ, out int maxZ);
+
+        switch (entrySide)
+        {
+            case EntrySide.Right:
+                return chunkCoord.x > maxX;
+            case EntrySide.Left:
+                return chunkCoord.x < minX;
+            case EntrySide.Top:
+                return chunkCoord.y > maxZ;
+            case EntrySide.Bottom:
+                return chunkCoord.y < minZ;
+            default:
+                return false;
+        }
+    }
+
+    private Vector2Int WorldToChunkCoord(Vector3 worldPosition)
+    {
+        float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
+        int chunkX = Mathf.FloorToInt((worldPosition.x - startingStartCorner.x) / chunkWorld);
+        int chunkZ = Mathf.FloorToInt((worldPosition.z - startingStartCorner.y) / chunkWorld);
+        return new Vector2Int(chunkX, chunkZ);
+    }
+
+    private void RebuildGridFromPurchasedChunks()
+    {
+        if (purchasedChunkCoords.Count == 0)
+        {
+            purchasedChunkCoords.Add(Vector2Int.zero);
+        }
+
+        int oldMinChunkX = minChunkX;
+        int oldMinChunkZ = minChunkZ;
+
+        int maxChunkX = int.MinValue;
+        int maxChunkZ = int.MinValue;
+        minChunkX = int.MaxValue;
+        minChunkZ = int.MaxValue;
+
+        foreach (Vector2Int chunk in purchasedChunkCoords)
+        {
+            minChunkX = Mathf.Min(minChunkX, chunk.x);
+            minChunkZ = Mathf.Min(minChunkZ, chunk.y);
+            maxChunkX = Mathf.Max(maxChunkX, chunk.x);
+            maxChunkZ = Mathf.Max(maxChunkZ, chunk.y);
+        }
+
+        int unit = Mathf.Max(1, chunkSize);
+        int deltaCellsX = (oldMinChunkX - minChunkX) * unit;
+        int deltaCellsZ = (oldMinChunkZ - minChunkZ) * unit;
+        ShiftGridCellData(deltaCellsX, deltaCellsZ);
+
+        gridWidth = (maxChunkX - minChunkX + 1) * unit;
+        gridHeight = (maxChunkZ - minChunkZ + 1) * unit;
+        coreGridSize = unit;
+        coreOriginX = -minChunkX * unit;
+        coreOriginZ = -minChunkZ * unit;
+
+        unlockedCells.Clear();
+        foreach (Vector2Int chunk in purchasedChunkCoords)
+        {
+            int originX = (chunk.x - minChunkX) * unit;
+            int originZ = (chunk.y - minChunkZ) * unit;
+            UnlockRect(originX, originZ, unit, unit);
+        }
+
+        startCorner = new Vector2(
+            startingStartCorner.x + (minChunkX * unit * cellSize),
+            startingStartCorner.y + (minChunkZ * unit * cellSize)
+        );
+
+        SyncLegacyGridSize();
+    }
+
+    private bool TryPurchaseChunkAtCoord(Vector2Int chunkCoord)
+    {
+        if (purchasedChunkCoords.Contains(chunkCoord))
+        {
+            return false;
+        }
+
+        if (IsBlockedByEntrySide(chunkCoord))
+        {
+            return false;
+        }
+
+        if (!IsChunkAdjacentToPurchased(chunkCoord))
+        {
+            return false;
+        }
+
+        purchasedChunkCoords.Add(chunkCoord);
+        RebuildGridFromPurchasedChunks();
+        UpdateGroundPlaneScale();
+        RebuildExteriorWalls();
+        RebuildCornerLights();
+        RebuildEntryObjects();
+        SpawnShaderPlaneForChunkCoord(chunkCoord);
+        return true;
+    }
+
+    private void SpawnShaderPlaneForChunkCoord(Vector2Int chunkCoord)
+    {
+        if (shaderPlanePrefab == null)
+        {
+            return;
+        }
+
+        float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
+        float centerX = startingStartCorner.x + ((chunkCoord.x + 0.5f) * chunkWorld);
+        float centerZ = startingStartCorner.y + ((chunkCoord.y + 0.5f) * chunkWorld);
+        Vector3 spawnPosition = new Vector3(centerX, 0f, centerZ);
+
+        GameObject shaderPlane = Instantiate(shaderPlanePrefab, spawnPosition, Quaternion.identity, shaderPlaneParent);
+        shaderPlane.transform.localScale = new Vector3(chunkWorld / 10f, 1f, chunkWorld / 10f);
+    }
+
     public bool SetEntryOnCell(int gridX, int gridZ)
     {
-        if (gridSize <= 0 || gridX < 0 || gridX >= gridSize || gridZ < 0 || gridZ >= gridSize)
+        if (CurrentGridWidth <= 0 || CurrentGridHeight <= 0 || gridX < 0 || gridX >= CurrentGridWidth || gridZ < 0 || gridZ >= CurrentGridHeight)
+        {
+            return false;
+        }
+
+        if (!IsCellUnlocked(gridX, gridZ))
         {
             return false;
         }
 
         bool isLeftEdge = (gridX == 0);
-        bool isRightEdge = (gridX == gridSize - 1);
+        bool isRightEdge = (gridX == CurrentGridWidth - 1);
         bool isBottomEdge = (gridZ == 0);
-        bool isTopEdge = (gridZ == gridSize - 1);
+        bool isTopEdge = (gridZ == CurrentGridHeight - 1);
 
         if (isRightEdge)
         {
@@ -188,13 +478,13 @@ public class GridScript : MonoBehaviour
 
     public bool SetEntryOnRightSide(int oneBasedRow)
     {
-        if (gridSize <= 0)
+        if (CurrentGridHeight <= 0)
         {
             return false;
         }
 
         entrySide = EntrySide.Right;
-        entryIndex = Mathf.Clamp(oneBasedRow - 1, 0, gridSize - 1);
+        entryIndex = Mathf.Clamp(oneBasedRow - 1, 0, CurrentGridHeight - 1);
         hasEntryPoint = true;
         EnsurePerimeterVisuals();
         return true;
@@ -203,13 +493,14 @@ public class GridScript : MonoBehaviour
     public bool TryGetEntrySpawnPosition(out Vector3 worldPosition)
     {
         worldPosition = Vector3.zero;
-        if (!hasEntryPoint || gridSize <= 0)
+        if (!hasEntryPoint || CurrentGridWidth <= 0 || CurrentGridHeight <= 0)
         {
             return false;
         }
 
-        int clampedIndex = Mathf.Clamp(entryIndex, 0, gridSize - 1);
-        Vector2Int cell = new Vector2Int(Mathf.Max(0, gridSize - 1), clampedIndex);
+        int sideLength = (entrySide == EntrySide.Left || entrySide == EntrySide.Right) ? CurrentGridHeight : CurrentGridWidth;
+        int clampedIndex = Mathf.Clamp(entryIndex, 0, sideLength - 1);
+        Vector2Int cell = new Vector2Int(Mathf.Max(0, CurrentGridWidth - 1), clampedIndex);
 
         if (entrySide == EntrySide.Left)
         {
@@ -217,7 +508,7 @@ public class GridScript : MonoBehaviour
         }
         else if (entrySide == EntrySide.Top)
         {
-            cell = new Vector2Int(clampedIndex, Mathf.Max(0, gridSize - 1));
+            cell = new Vector2Int(clampedIndex, Mathf.Max(0, CurrentGridHeight - 1));
         }
         else if (entrySide == EntrySide.Bottom)
         {
@@ -232,13 +523,14 @@ public class GridScript : MonoBehaviour
     {
         cell = default;
 
-        if (!hasEntryPoint || gridSize <= 0)
+        if (!hasEntryPoint || CurrentGridWidth <= 0 || CurrentGridHeight <= 0)
         {
             return false;
         }
 
-        int clampedIndex = Mathf.Clamp(entryIndex, 0, gridSize - 1);
-        cell = new Vector2Int(Mathf.Max(0, gridSize - 1), clampedIndex);
+        int sideLength = (entrySide == EntrySide.Left || entrySide == EntrySide.Right) ? CurrentGridHeight : CurrentGridWidth;
+        int clampedIndex = Mathf.Clamp(entryIndex, 0, sideLength - 1);
+        cell = new Vector2Int(Mathf.Max(0, CurrentGridWidth - 1), clampedIndex);
 
         if (entrySide == EntrySide.Left)
         {
@@ -246,7 +538,7 @@ public class GridScript : MonoBehaviour
         }
         else if (entrySide == EntrySide.Top)
         {
-            cell = new Vector2Int(clampedIndex, Mathf.Max(0, gridSize - 1));
+            cell = new Vector2Int(clampedIndex, Mathf.Max(0, CurrentGridHeight - 1));
         }
         else if (entrySide == EntrySide.Bottom)
         {
@@ -258,8 +550,7 @@ public class GridScript : MonoBehaviour
 
     private bool IsChunkAvailable(EntrySide side)
     {
-        // Right side always locked
-        if (side == EntrySide.Right)
+        if (side == EntrySide.None)
         {
             return false;
         }
@@ -270,42 +561,24 @@ public class GridScript : MonoBehaviour
             return false;
         }
 
-        // Can't repurchase
-        if (purchasedChunks.Contains(side))
+        Vector2Int chunkOffset = SideToChunkOffset(side);
+        if (purchasedChunkCoords.Contains(chunkOffset))
         {
             return false;
         }
 
-        // At start, only purchase from the opposite direction of entry
-        // After that, only adjacent chunks (those that touch the expanded grid)
-        return true;
+        if (IsBlockedByEntrySide(chunkOffset))
+        {
+            return false;
+        }
+
+        return IsChunkAdjacentToPurchased(chunkOffset);
     }
 
     public bool TryPurchaseChunkAtWorldPosition(Vector3 worldPosition)
     {
-        float worldSize = gridSize * cellSize;
-        float endX = startCorner.x + worldSize;
-        float endZ = startCorner.y + worldSize;
-
-        EntrySide side = EntrySide.None;
-        if (worldPosition.x < startCorner.x)
-        {
-            side = EntrySide.Left;
-        }
-        else if (worldPosition.x >= endX)
-        {
-            side = EntrySide.Right;
-        }
-        else if (worldPosition.z < startCorner.y)
-        {
-            side = EntrySide.Bottom;
-        }
-        else if (worldPosition.z >= endZ)
-        {
-            side = EntrySide.Top;
-        }
-
-        if (side == EntrySide.None || !IsChunkAvailable(side))
+        Vector2Int clickedChunk = WorldToChunkCoord(worldPosition);
+        if (purchasedChunkCoords.Contains(clickedChunk) || IsBlockedByEntrySide(clickedChunk) || !IsChunkAdjacentToPurchased(clickedChunk))
         {
             return false;
         }
@@ -320,45 +593,18 @@ public class GridScript : MonoBehaviour
             return false;
         }
 
-        return TryPurchaseChunk(side);
+        return TryPurchaseChunkAtCoord(clickedChunk);
     }
 
     public bool TryPurchaseChunk(EntrySide side)
     {
-        if (chunkSize <= 0 || !IsChunkAvailable(side))
+        if (chunkSize <= 0 || side == EntrySide.None)
         {
             return false;
         }
 
-        float deltaX = 0f;
-        float deltaZ = 0f;
-        int addedSize = Mathf.Max(1, chunkSize);
-
-        switch (side)
-        {
-            case EntrySide.Left:
-                deltaX = -addedSize * cellSize;
-                break;
-            case EntrySide.Bottom:
-                deltaZ = -addedSize * cellSize;
-                break;
-            case EntrySide.Top:
-                break;
-            case EntrySide.Right:
-                return false;
-            default:
-                return false;
-        }
-
-        purchasedChunks.Add(side);
-        startCorner += new Vector2(deltaX, deltaZ);
-        gridSize = Mathf.Max(1, gridSize + addedSize);
-        UpdateGroundPlaneScale();
-        RebuildExteriorWalls();
-        RebuildCornerLights();
-        RebuildEntryObjects();
-        SpawnShaderPlaneForChunk(side);
-        return true;
+        Vector2Int target = SideToChunkOffset(side);
+        return TryPurchaseChunkAtCoord(target);
     }
 
     private void SpawnShaderPlaneForChunk(EntrySide side)
@@ -369,37 +615,57 @@ public class GridScript : MonoBehaviour
         }
 
         float chunkWorldSize = Mathf.Max(1, chunkSize) * cellSize;
-        float currentWorldSize = (gridSize - chunkSize) * cellSize; // Size before this chunk was added
+        float coreWorldSize = Mathf.Max(1, coreGridSize) * cellSize;
+        float coreStartX = startCorner.x + (coreOriginX * cellSize);
+        float coreStartZ = startCorner.y + (coreOriginZ * cellSize);
+        float coreEndX = coreStartX + coreWorldSize;
+        float coreEndZ = coreStartZ + coreWorldSize;
+        float scaleX = chunkWorldSize;
+        float scaleZ = chunkWorldSize;
         Vector3 spawnPosition = Vector3.zero;
 
         switch (side)
         {
             case EntrySide.Left:
-                spawnPosition = new Vector3(startCorner.x + (chunkWorldSize * 0.5f), 0f, startCorner.y + (currentWorldSize * 0.5f));
+                spawnPosition = new Vector3(coreStartX - (chunkWorldSize * 0.5f), 0f, coreStartZ + (coreWorldSize * 0.5f));
+                scaleZ = coreWorldSize;
                 break;
             case EntrySide.Bottom:
-                spawnPosition = new Vector3(startCorner.x + (currentWorldSize * 0.5f), 0f, startCorner.y + (chunkWorldSize * 0.5f));
+                spawnPosition = new Vector3(coreStartX + (coreWorldSize * 0.5f), 0f, coreStartZ - (chunkWorldSize * 0.5f));
+                scaleX = coreWorldSize;
                 break;
             case EntrySide.Top:
-                spawnPosition = new Vector3(startCorner.x + (currentWorldSize * 0.5f), 0f, startCorner.y + currentWorldSize + (chunkWorldSize * 0.5f));
+                spawnPosition = new Vector3(coreStartX + (coreWorldSize * 0.5f), 0f, coreEndZ + (chunkWorldSize * 0.5f));
+                scaleX = coreWorldSize;
+                break;
+            case EntrySide.Right:
+                spawnPosition = new Vector3(coreEndX + (chunkWorldSize * 0.5f), 0f, coreStartZ + (coreWorldSize * 0.5f));
+                scaleZ = coreWorldSize;
                 break;
             default:
                 return;
         }
 
         GameObject shaderPlane = Instantiate(shaderPlanePrefab, spawnPosition, Quaternion.identity, shaderPlaneParent);
-        shaderPlane.transform.localScale = new Vector3(chunkWorldSize / 10f, 1f, currentWorldSize / 10f);
+        shaderPlane.transform.localScale = new Vector3(scaleX / 10f, 1f, scaleZ / 10f);
     }
 
     private void ResetToStartingGrid()
     {
-        gridSize = Mathf.Max(1, startingGridSize);
-        startCorner = startingStartCorner;
+        int initialSize = Mathf.Max(1, chunkSize);
+        coreGridSize = initialSize;
+        purchasedChunkCoords.Clear();
+        purchasedChunkCoords.Add(Vector2Int.zero);
+        minChunkX = 0;
+        minChunkZ = 0;
         hasEntryPoint = false;
         entrySide = EntrySide.None;
         entryIndex = 0;
         occupiedCells.Clear();
         roadCells.Clear();
+        unlockedCells.Clear();
+        purchasedChunks.Clear();
+        RebuildGridFromPurchasedChunks();
         purchasedChunks.Clear();
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
@@ -414,16 +680,18 @@ public class GridScript : MonoBehaviour
         }
 
         float planeWorldSize = Mathf.Max(0.01f, groundPlaneBaseSize);
-        float worldSize = gridSize * cellSize;
-        float scale = worldSize / planeWorldSize;
+        float worldWidth = CurrentGridWidth * cellSize;
+        float worldHeight = CurrentGridHeight * cellSize;
+        float scaleX = worldWidth / planeWorldSize;
+        float scaleZ = worldHeight / planeWorldSize;
 
         Vector3 currentScale = groundPlane.localScale;
-        groundPlane.localScale = new Vector3(scale, currentScale.y, scale);
+        groundPlane.localScale = new Vector3(scaleX, currentScale.y, scaleZ);
 
         Vector3 anchoredPosition = new Vector3(
-            startCorner.x + (worldSize * 0.5f),
+            startCorner.x + (worldWidth * 0.5f),
             groundPlane.position.y,
-            startCorner.y + (worldSize * 0.5f)
+            startCorner.y + (worldHeight * 0.5f)
         );
         groundPlane.position = anchoredPosition;
     }
@@ -437,12 +705,13 @@ public class GridScript : MonoBehaviour
             return;
         }
 
-        float worldSize = gridSize * cellSize;
-        float endX = startCorner.x + worldSize;
-        float endZ = startCorner.y + worldSize;
+        float worldWidth = CurrentGridWidth * cellSize;
+        float worldHeight = CurrentGridHeight * cellSize;
+        float endX = startCorner.x + worldWidth;
+        float endZ = startCorner.y + worldHeight;
         float anchorOffset = Mathf.Clamp01(exteriorWallAnchorOffsetCells);
 
-        for (int x = 0; x < gridSize; x++)
+        for (int x = 0; x < CurrentGridWidth; x++)
         {
             float wallX = startCorner.x + ((x + anchorOffset) * cellSize);
 
@@ -453,7 +722,7 @@ public class GridScript : MonoBehaviour
             SpawnExteriorWall(topPos, Quaternion.Euler(topWallRotation));
         }
 
-        for (int z = 0; z < gridSize; z++)
+        for (int z = 0; z < CurrentGridHeight; z++)
         {
             if (hasEntryPoint && entrySide == EntrySide.Left && z == entryIndex)
                 continue;
@@ -469,7 +738,7 @@ public class GridScript : MonoBehaviour
             SpawnExteriorWall(rightPos, Quaternion.Euler(rightWallRotation));
         }
 
-        for (int x = 0; x < gridSize; x++)
+        for (int x = 0; x < CurrentGridWidth; x++)
         {
             if (hasEntryPoint && entrySide == EntrySide.Bottom && x == entryIndex)
                 continue;
@@ -495,9 +764,10 @@ public class GridScript : MonoBehaviour
             return;
         }
 
-        float worldSize = gridSize * cellSize;
-        float endX = startCorner.x + worldSize;
-        float endZ = startCorner.y + worldSize;
+        float worldWidth = CurrentGridWidth * cellSize;
+        float worldHeight = CurrentGridHeight * cellSize;
+        float endX = startCorner.x + worldWidth;
+        float endZ = startCorner.y + worldHeight;
 
         Vector3 bottomLeftPos = new Vector3(startCorner.x, cornerLightY, startCorner.y)
             + cornerLightOffset
@@ -618,7 +888,7 @@ public class GridScript : MonoBehaviour
     }
     /// <summary>
     /// Checks if a building footprint is clear.
-    /// gridX/gridZ are the local grid indices (0 to gridSize-1)
+    /// gridX/gridZ are the local grid indices.
     /// </summary>
     public bool CanPlaceBuilding(int gridX, int gridZ, int width, int depth)
     {
@@ -630,7 +900,10 @@ public class GridScript : MonoBehaviour
                 int checkZ = gridZ + z;
 
                 // 1. Boundary Check
-                if (checkX < 0 || checkX >= gridSize || checkZ < 0 || checkZ >= gridSize)
+                if (checkX < 0 || checkX >= CurrentGridWidth || checkZ < 0 || checkZ >= CurrentGridHeight)
+                    return false;
+
+                if (!IsCellUnlocked(checkX, checkZ))
                     return false;
 
                 // 2. Occupancy Check
@@ -674,7 +947,7 @@ public class GridScript : MonoBehaviour
 
     public bool IsWithinGrid(Vector2Int cell)
     {
-        return cell.x >= 0 && cell.x < gridSize && cell.y >= 0 && cell.y < gridSize;
+        return cell.x >= 0 && cell.x < CurrentGridWidth && cell.y >= 0 && cell.y < CurrentGridHeight && IsCellUnlocked(cell.x, cell.y);
     }
 
     public Vector2Int WorldToCell(Vector3 worldPosition)
@@ -832,7 +1105,10 @@ public class GridScript : MonoBehaviour
             int cellX = alongX ? startX + i : startX;
             int cellZ = alongX ? startZ : startZ + i;
 
-            if (cellX < 0 || cellX >= gridSize || cellZ < 0 || cellZ >= gridSize)
+            if (cellX < 0 || cellX >= CurrentGridWidth || cellZ < 0 || cellZ >= CurrentGridHeight)
+                return false;
+
+            if (!IsCellUnlocked(cellX, cellZ))
                 return false;
 
             if (!roadCells.Contains(new Vector2Int(cellX, cellZ)))
@@ -846,61 +1122,65 @@ public class GridScript : MonoBehaviour
     {
         Gizmos.color = gridColor;
         
-        // Calculate the far edges based on current size
-        float worldSize = gridSize * cellSize;
-        float endX = startCorner.x + (gridSize * cellSize);
-        float endZ = startCorner.y + (gridSize * cellSize);
+        float worldWidth = CurrentGridWidth * cellSize;
+        float worldHeight = CurrentGridHeight * cellSize;
+        float endX = startCorner.x + worldWidth;
+        float endZ = startCorner.y + worldHeight;
 
-        for (int i = 0; i <= gridSize; i++)
+        if (unlockedCells != null)
         {
-            float offset = i * cellSize;
+            foreach (Vector2Int unlockedCell in unlockedCells)
+            {
+                if (unlockedCell.x < 0 || unlockedCell.x >= CurrentGridWidth || unlockedCell.y < 0 || unlockedCell.y >= CurrentGridHeight)
+                {
+                    continue;
+                }
 
-            // Vertical Lines (Parallel to Z)
-            Gizmos.DrawLine(
-                new Vector3(startCorner.x + offset, 0, startCorner.y),
-                new Vector3(startCorner.x + offset, 0, endZ)
-            );
+                Vector3 center = new Vector3(
+                    startCorner.x + (unlockedCell.x + 0.5f) * cellSize,
+                    0f,
+                    startCorner.y + (unlockedCell.y + 0.5f) * cellSize
+                );
 
-            // Horizontal Lines (Parallel to X)
-            Gizmos.DrawLine(
-                new Vector3(startCorner.x, 0, startCorner.y + offset),
-                new Vector3(endX, 0, startCorner.y + offset)
-            );
+                Gizmos.DrawWireCube(center, new Vector3(cellSize, 0.001f, cellSize));
+            }
         }
 
         if (hasEntryPoint)
         {
-            float chunkWorldSize = Mathf.Max(1, chunkSize) * cellSize;
+            float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
+            HashSet<Vector2Int> frontier = new HashSet<Vector2Int>();
+            Vector2Int[] directions = { Vector2Int.left, Vector2Int.right, Vector2Int.up, Vector2Int.down };
 
-            // Draw Left chunk
-            if (entrySide != EntrySide.Left && EntrySide.Left != EntrySide.Right)
+            foreach (Vector2Int owned in purchasedChunkCoords)
             {
-                bool available = IsChunkAvailable(EntrySide.Left);
-                Gizmos.color = available ? new Color(1f, 0.5f, 0f, 0.22f) : new Color(0.2f, 0.4f, 1f, 0.22f); // Orange available, Blue locked
-                Gizmos.DrawCube(new Vector3(startCorner.x - (chunkWorldSize * 0.5f), 0.01f, startCorner.y + (worldSize * 0.5f)), new Vector3(chunkWorldSize * 0.95f, 0.02f, worldSize * 0.95f));
+                for (int i = 0; i < directions.Length; i++)
+                {
+                    Vector2Int candidate = owned + directions[i];
+                    if (purchasedChunkCoords.Contains(candidate))
+                    {
+                        continue;
+                    }
+
+                    if (IsBlockedByEntrySide(candidate))
+                    {
+                        continue;
+                    }
+
+                    frontier.Add(candidate);
+                }
             }
 
-            // Draw Right chunk (always blocked)
-            if (entrySide != EntrySide.Right)
+            foreach (Vector2Int candidate in frontier)
             {
-                Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.22f); // Red for blocked
-                Gizmos.DrawCube(new Vector3(endX + (chunkWorldSize * 0.5f), 0.01f, startCorner.y + (worldSize * 0.5f)), new Vector3(chunkWorldSize * 0.95f, 0.02f, worldSize * 0.95f));
-            }
+                Vector3 center = new Vector3(
+                    startingStartCorner.x + ((candidate.x + 0.5f) * chunkWorld),
+                    0.01f,
+                    startingStartCorner.y + ((candidate.y + 0.5f) * chunkWorld)
+                );
 
-            // Draw Bottom chunk
-            if (entrySide != EntrySide.Bottom && EntrySide.Bottom != EntrySide.Right)
-            {
-                bool available = IsChunkAvailable(EntrySide.Bottom);
-                Gizmos.color = available ? new Color(1f, 0.5f, 0f, 0.22f) : new Color(0.2f, 0.4f, 1f, 0.22f); // Orange available, Blue locked
-                Gizmos.DrawCube(new Vector3(startCorner.x + (worldSize * 0.5f), 0.01f, startCorner.y - (chunkWorldSize * 0.5f)), new Vector3(worldSize * 0.95f, 0.02f, chunkWorldSize * 0.95f));
-            }
-
-            // Draw Top chunk
-            if (entrySide != EntrySide.Top && EntrySide.Top != EntrySide.Right)
-            {
-                bool available = IsChunkAvailable(EntrySide.Top);
-                Gizmos.color = available ? new Color(1f, 0.5f, 0f, 0.22f) : new Color(0.2f, 0.4f, 1f, 0.22f); // Orange available, Blue locked
-                Gizmos.DrawCube(new Vector3(startCorner.x + (worldSize * 0.5f), 0.01f, endZ + (chunkWorldSize * 0.5f)), new Vector3(worldSize * 0.95f, 0.02f, chunkWorldSize * 0.95f));
+                Gizmos.color = new Color(1f, 0.5f, 0f, 0.22f);
+                Gizmos.DrawCube(center, new Vector3(chunkWorld * 0.95f, 0.02f, chunkWorld * 0.95f));
             }
         }
 
@@ -909,7 +1189,12 @@ public class GridScript : MonoBehaviour
             Gizmos.color = occupiedCellColor;
             foreach (Vector2Int cell in occupiedCells)
             {
-                if (cell.x < 0 || cell.x >= gridSize || cell.y < 0 || cell.y >= gridSize)
+                if (cell.x < 0 || cell.x >= CurrentGridWidth || cell.y < 0 || cell.y >= CurrentGridHeight)
+                {
+                    continue;
+                }
+
+                if (!IsCellUnlocked(cell.x, cell.y))
                 {
                     continue;
                 }
@@ -944,7 +1229,12 @@ public class GridScript : MonoBehaviour
                 int cellX = previewX + x;
                 int cellZ = previewZ + z;
 
-                if (cellX < 0 || cellX >= gridSize || cellZ < 0 || cellZ >= gridSize)
+                if (cellX < 0 || cellX >= CurrentGridWidth || cellZ < 0 || cellZ >= CurrentGridHeight)
+                {
+                    continue;
+                }
+
+                if (!IsCellUnlocked(cellX, cellZ))
                 {
                     continue;
                 }

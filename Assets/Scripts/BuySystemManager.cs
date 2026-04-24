@@ -57,6 +57,19 @@ public class BuySystemManager : MonoBehaviour
         }
     }
 
+    public void SelectExpansionBuy()
+    {
+        selectedBuilding = BuildingType.None;
+
+        if (BuildConstruction.instance != null)
+        {
+            // Non-positive index keeps BuildConstruction in chunk-expansion purchase mode.
+            BuildConstruction.instance.GetBuildingType(0);
+        }
+
+        Debug.Log("Selected mode: Expansion Buy");
+    }
+
     public bool TryGetBuildingData(BuildingType type, out GameObject prefab, out int width, out int depth)
     {
         prefab = null;

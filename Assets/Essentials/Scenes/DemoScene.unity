@@ -696,14 +696,13 @@ GameObject:
   - component: {fileID: 14064139}
   - component: {fileID: 14064138}
   - component: {fileID: 14064137}
-  - component: {fileID: 14064136}
   m_Layer: 0
   m_Name: GridUpgrade
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &14064135
 RectTransform:
   m_ObjectHideFlags: 0
@@ -724,21 +723,6 @@ RectTransform:
   m_AnchoredPosition: {x: -781, y: -178}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &14064136
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 14064134}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cfbbee6929c84bd45afcb348e38e9c08, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  gridScript: {fileID: 1968206777}
-  button: {fileID: 14064137}
-  costText: {fileID: 1607189941}
 --- !u!114 &14064137
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -783,13 +767,13 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: 
-        m_MethodName: 
+      - m_Target: {fileID: 1844831648}
+        m_TargetAssemblyTypeName: BuySystemManager, Assembly-CSharp
+        m_MethodName: SelectExpansionBuy
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: 
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
           m_StringArgument: 
@@ -27506,7 +27490,7 @@ Transform:
   m_GameObject: {fileID: 534271048}
   serializedVersion: 2
   m_LocalRotation: {x: 0.41245538, y: -0, z: -0, w: 0.9109778}
-  m_LocalPosition: {x: -109.8, y: 112.3, z: -112.7}
+  m_LocalPosition: {x: -109.8, y: 191, z: -167}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -94890,6 +94874,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   startingGridSize: 10
   gridSize: 10
+  gridWidth: 10
+  gridHeight: 10
+  coreGridSize: 10
+  coreOriginX: 0
+  coreOriginZ: 0
   cellSize: 5
   startingStartCorner: {x: 0, y: 0}
   startCorner: {x: 0, y: 0}
@@ -94899,7 +94888,8 @@ MonoBehaviour:
   groundPlaneBaseSize: 10
   shaderPlanePrefab: {fileID: 4638128076307016847, guid: 34d28b8e86fafff41a3ccc072cd9ad8e,
     type: 3}
-  shaderPlaneParent: {fileID: 0}
+  shaderPlaneParent: {fileID: 3389517158822380813, guid: 34d28b8e86fafff41a3ccc072cd9ad8e,
+    type: 3}
   exteriorWallPrefab: {fileID: 1094773209605363100, guid: 5dc2be49e08c3cd44aa600f1fc7472df,
     type: 3}
   exteriorWallParent: {fileID: 0}
