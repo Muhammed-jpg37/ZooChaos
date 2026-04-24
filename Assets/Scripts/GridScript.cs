@@ -29,6 +29,10 @@ public class GridScript : MonoBehaviour
     [SerializeField] private float groundPlaneBaseSize = 10f;
     [SerializeField] private GameObject shaderPlanePrefab;
     [SerializeField] private Transform shaderPlaneParent;
+    [SerializeField] private GameObject expansionShaderPlanePrefab;
+    [SerializeField] private Transform expansionShaderPlaneParent;
+    [SerializeField] private GameObject gridExpansionVisualPrefab;
+    [SerializeField] private Transform gridExpansionVisualParent;
 
     [Header("Perimeter Walls")]
     [SerializeField] private GameObject exteriorWallPrefab;
@@ -92,8 +96,11 @@ public class GridScript : MonoBehaviour
     private int previewWidth = 1;
     private int previewDepth = 1;
     private bool previewRequiresFullRoadSide;
+    private bool previewHasExternalValidation;
+    private bool previewExternalCanPlace;
     private readonly List<GameObject> spawnedExteriorWalls = new List<GameObject>();
     private readonly List<GameObject> spawnedCornerLights = new List<GameObject>();
+    private readonly List<GameObject> spawnedExpansionFrontierVisuals = new List<GameObject>();
     private Transform runtimeWallsParent;
     
     private Transform runtimeCornerLightsParent;
@@ -128,6 +135,11 @@ public class GridScript : MonoBehaviour
     private void OnEnable()
     {
         EnsurePerimeterVisuals();
+    }
+
+    private void OnDisable()
+    {
+        ClearExpansionFrontierVisuals();
     }
 
     private void OnValidate()
@@ -177,6 +189,7 @@ public class GridScript : MonoBehaviour
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildExpansionFrontierVisuals();
     }
 
     public bool HasEntryPointConfigured => hasEntryPoint;
@@ -408,14 +421,99 @@ public class GridScript : MonoBehaviour
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildExpansionFrontierVisuals();
         RebuildEntryObjects();
         SpawnShaderPlaneForChunkCoord(chunkCoord);
         return true;
     }
 
+    private HashSet<Vector2Int> GetFrontierChunkCoords()
+    {
+        HashSet<Vector2Int> frontier = new HashSet<Vector2Int>();
+        Vector2Int[] directions = { Vector2Int.left, Vector2Int.right, Vector2Int.up, Vector2Int.down };
+
+        foreach (Vector2Int owned in purchasedChunkCoords)
+        {
+            for (int i = 0; i < directions.Length; i++)
+            {
+                Vector2Int candidate = owned + directions[i];
+                if (purchasedChunkCoords.Contains(candidate) || IsBlockedByEntrySide(candidate))
+                {
+                    continue;
+                }
+
+                frontier.Add(candidate);
+            }
+        }
+
+        return frontier;
+    }
+
+    private void RebuildExpansionFrontierVisuals()
+    {
+        ClearExpansionFrontierVisuals();
+
+        if (!hasEntryPoint)
+        {
+            return;
+        }
+
+        GameObject prefab = gridExpansionVisualPrefab != null
+            ? gridExpansionVisualPrefab
+            : (expansionShaderPlanePrefab != null ? expansionShaderPlanePrefab : shaderPlanePrefab);
+
+        if (prefab == null)
+        {
+            return;
+        }
+
+        float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
+        Transform parent = gridExpansionVisualParent != null
+            ? gridExpansionVisualParent
+            : (expansionShaderPlaneParent != null ? expansionShaderPlaneParent : shaderPlaneParent);
+
+        HashSet<Vector2Int> frontier = GetFrontierChunkCoords();
+        foreach (Vector2Int candidate in frontier)
+        {
+            Vector3 center = new Vector3(
+                startingStartCorner.x + ((candidate.x + 0.5f) * chunkWorld),
+                0f,
+                startingStartCorner.y + ((candidate.y + 0.5f) * chunkWorld)
+            );
+
+            GameObject visual = Instantiate(prefab, center, Quaternion.identity, parent);
+            visual.transform.localScale = new Vector3(chunkWorld / 10f, 1f, chunkWorld / 10f);
+            spawnedExpansionFrontierVisuals.Add(visual);
+        }
+    }
+
+    private void ClearExpansionFrontierVisuals()
+    {
+        for (int i = spawnedExpansionFrontierVisuals.Count - 1; i >= 0; i--)
+        {
+            GameObject visual = spawnedExpansionFrontierVisuals[i];
+            if (visual == null)
+            {
+                continue;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(visual);
+            }
+            else
+            {
+                DestroyImmediate(visual);
+            }
+        }
+
+        spawnedExpansionFrontierVisuals.Clear();
+    }
+
     private void SpawnShaderPlaneForChunkCoord(Vector2Int chunkCoord)
     {
-        if (shaderPlanePrefab == null)
+        GameObject prefabToSpawn = shaderPlanePrefab != null ? shaderPlanePrefab : expansionShaderPlanePrefab;
+        if (prefabToSpawn == null)
         {
             return;
         }
@@ -425,7 +523,8 @@ public class GridScript : MonoBehaviour
         float centerZ = startingStartCorner.y + ((chunkCoord.y + 0.5f) * chunkWorld);
         Vector3 spawnPosition = new Vector3(centerX, 0f, centerZ);
 
-        GameObject shaderPlane = Instantiate(shaderPlanePrefab, spawnPosition, Quaternion.identity, shaderPlaneParent);
+        Transform parent = shaderPlaneParent != null ? shaderPlaneParent : expansionShaderPlaneParent;
+        GameObject shaderPlane = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, parent);
         shaderPlane.transform.localScale = new Vector3(chunkWorld / 10f, 1f, chunkWorld / 10f);
     }
 
@@ -609,7 +708,8 @@ public class GridScript : MonoBehaviour
 
     private void SpawnShaderPlaneForChunk(EntrySide side)
     {
-        if (shaderPlanePrefab == null)
+        GameObject prefabToSpawn = shaderPlanePrefab != null ? shaderPlanePrefab : expansionShaderPlanePrefab;
+        if (prefabToSpawn == null)
         {
             return;
         }
@@ -646,7 +746,8 @@ public class GridScript : MonoBehaviour
                 return;
         }
 
-        GameObject shaderPlane = Instantiate(shaderPlanePrefab, spawnPosition, Quaternion.identity, shaderPlaneParent);
+        Transform parent = shaderPlaneParent != null ? shaderPlaneParent : expansionShaderPlaneParent;
+        GameObject shaderPlane = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, parent);
         shaderPlane.transform.localScale = new Vector3(scaleX / 10f, 1f, scaleZ / 10f);
     }
 
@@ -665,11 +766,13 @@ public class GridScript : MonoBehaviour
         roadCells.Clear();
         unlockedCells.Clear();
         purchasedChunks.Clear();
+        ClearExpansionFrontierVisuals();
         RebuildGridFromPurchasedChunks();
         purchasedChunks.Clear();
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildExpansionFrontierVisuals();
     }
 
     private void UpdateGroundPlaneScale()
@@ -705,53 +808,68 @@ public class GridScript : MonoBehaviour
             return;
         }
 
-        float worldWidth = CurrentGridWidth * cellSize;
-        float worldHeight = CurrentGridHeight * cellSize;
-        float endX = startCorner.x + worldWidth;
-        float endZ = startCorner.y + worldHeight;
         float anchorOffset = Mathf.Clamp01(exteriorWallAnchorOffsetCells);
 
-        for (int x = 0; x < CurrentGridWidth; x++)
+        foreach (Vector2Int cell in unlockedCells)
         {
-            float wallX = startCorner.x + ((x + anchorOffset) * cellSize);
+            if (cell.x < 0 || cell.x >= CurrentGridWidth || cell.y < 0 || cell.y >= CurrentGridHeight)
+            {
+                continue;
+            }
 
-            Vector3 bottomPos = new Vector3(wallX, exteriorWallY, startCorner.y) + exteriorWallOffset + bottomWallOffset;
-            SpawnExteriorWall(bottomPos, Quaternion.Euler(bottomWallRotation));
+            bool hasBottomNeighbor = IsCellUnlocked(cell.x, cell.y - 1);
+            bool hasTopNeighbor = IsCellUnlocked(cell.x, cell.y + 1);
+            bool hasLeftNeighbor = IsCellUnlocked(cell.x - 1, cell.y);
+            bool hasRightNeighbor = IsCellUnlocked(cell.x + 1, cell.y);
 
-            Vector3 topPos = new Vector3(wallX, exteriorWallY, endZ) + exteriorWallOffset + topWallOffset;
-            SpawnExteriorWall(topPos, Quaternion.Euler(topWallRotation));
+            float wallX = startCorner.x + ((cell.x + anchorOffset) * cellSize);
+            float wallZ = startCorner.y + ((cell.y + anchorOffset) * cellSize);
+
+            if (!hasBottomNeighbor && !ShouldSkipEntryGap(cell, EntrySide.Bottom))
+            {
+                Vector3 bottomPos = new Vector3(wallX, exteriorWallY, startCorner.y + (cell.y * cellSize)) + exteriorWallOffset + bottomWallOffset;
+                SpawnExteriorWall(bottomPos, Quaternion.Euler(bottomWallRotation));
+            }
+
+            if (!hasTopNeighbor && !ShouldSkipEntryGap(cell, EntrySide.Top))
+            {
+                Vector3 topPos = new Vector3(wallX, exteriorWallY, startCorner.y + ((cell.y + 1) * cellSize)) + exteriorWallOffset + topWallOffset;
+                SpawnExteriorWall(topPos, Quaternion.Euler(topWallRotation));
+            }
+
+            if (!hasLeftNeighbor && !ShouldSkipEntryGap(cell, EntrySide.Left))
+            {
+                Vector3 leftPos = new Vector3(startCorner.x + (cell.x * cellSize), exteriorWallY, wallZ) + exteriorWallOffset + leftWallOffset;
+                SpawnExteriorWall(leftPos, Quaternion.Euler(leftWallRotation));
+            }
+
+            if (!hasRightNeighbor && !ShouldSkipEntryGap(cell, EntrySide.Right))
+            {
+                Vector3 rightPos = new Vector3(startCorner.x + ((cell.x + 1) * cellSize), exteriorWallY, wallZ) + exteriorWallOffset + rightWallOffset;
+                SpawnExteriorWall(rightPos, Quaternion.Euler(rightWallRotation));
+            }
+        }
+    }
+
+    private bool ShouldSkipEntryGap(Vector2Int cell, EntrySide edge)
+    {
+        if (!hasEntryPoint || entrySide != edge)
+        {
+            return false;
         }
 
-        for (int z = 0; z < CurrentGridHeight; z++)
+        switch (edge)
         {
-            if (hasEntryPoint && entrySide == EntrySide.Left && z == entryIndex)
-                continue;
-            if (hasEntryPoint && entrySide == EntrySide.Right && z == entryIndex)
-                continue;
-
-            float wallZ = startCorner.y + ((z + anchorOffset) * cellSize);
-
-            Vector3 leftPos = new Vector3(startCorner.x, exteriorWallY, wallZ) + exteriorWallOffset + leftWallOffset;
-            SpawnExteriorWall(leftPos, Quaternion.Euler(leftWallRotation));
-
-            Vector3 rightPos = new Vector3(endX, exteriorWallY, wallZ) + exteriorWallOffset + rightWallOffset;
-            SpawnExteriorWall(rightPos, Quaternion.Euler(rightWallRotation));
-        }
-
-        for (int x = 0; x < CurrentGridWidth; x++)
-        {
-            if (hasEntryPoint && entrySide == EntrySide.Bottom && x == entryIndex)
-                continue;
-            if (hasEntryPoint && entrySide == EntrySide.Top && x == entryIndex)
-                continue;
-
-            float wallX = startCorner.x + ((x + anchorOffset) * cellSize);
-
-            Vector3 bottomPos = new Vector3(wallX, exteriorWallY, startCorner.y) + exteriorWallOffset + bottomWallOffset;
-            SpawnExteriorWall(bottomPos, Quaternion.Euler(bottomWallRotation));
-
-            Vector3 topPos = new Vector3(wallX, exteriorWallY, endZ) + exteriorWallOffset + topWallOffset;
-            SpawnExteriorWall(topPos, Quaternion.Euler(topWallRotation));
+            case EntrySide.Left:
+                return cell.x == 0 && cell.y == entryIndex;
+            case EntrySide.Right:
+                return cell.x == CurrentGridWidth - 1 && cell.y == entryIndex;
+            case EntrySide.Bottom:
+                return cell.y == 0 && cell.x == entryIndex;
+            case EntrySide.Top:
+                return cell.y == CurrentGridHeight - 1 && cell.x == entryIndex;
+            default:
+                return false;
         }
     }
 
@@ -879,12 +997,20 @@ public class GridScript : MonoBehaviour
         previewWidth = Mathf.Max(1, width);
         previewDepth = Mathf.Max(1, depth);
         previewRequiresFullRoadSide = requiresFullRoadSide;
+        previewHasExternalValidation = false;
+    }
+
+    public void SetPlacementPreviewValidation(bool canPlace)
+    {
+        previewHasExternalValidation = true;
+        previewExternalCanPlace = canPlace;
     }
 
     public void ClearPlacementPreview()
     {
         hasPreview = false;
         previewRequiresFullRoadSide = false;
+        previewHasExternalValidation = false;
     }
     /// <summary>
     /// Checks if a building footprint is clear.
@@ -1148,40 +1274,7 @@ public class GridScript : MonoBehaviour
 
         if (hasEntryPoint)
         {
-            float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
-            HashSet<Vector2Int> frontier = new HashSet<Vector2Int>();
-            Vector2Int[] directions = { Vector2Int.left, Vector2Int.right, Vector2Int.up, Vector2Int.down };
-
-            foreach (Vector2Int owned in purchasedChunkCoords)
-            {
-                for (int i = 0; i < directions.Length; i++)
-                {
-                    Vector2Int candidate = owned + directions[i];
-                    if (purchasedChunkCoords.Contains(candidate))
-                    {
-                        continue;
-                    }
-
-                    if (IsBlockedByEntrySide(candidate))
-                    {
-                        continue;
-                    }
-
-                    frontier.Add(candidate);
-                }
-            }
-
-            foreach (Vector2Int candidate in frontier)
-            {
-                Vector3 center = new Vector3(
-                    startingStartCorner.x + ((candidate.x + 0.5f) * chunkWorld),
-                    0.01f,
-                    startingStartCorner.y + ((candidate.y + 0.5f) * chunkWorld)
-                );
-
-                Gizmos.color = new Color(1f, 0.5f, 0f, 0.22f);
-                Gizmos.DrawCube(center, new Vector3(chunkWorld * 0.95f, 0.02f, chunkWorld * 0.95f));
-            }
+            // Expansion frontier visuals are spawned with prefab instances instead of Gizmos.
         }
 
         if (occupiedCells != null && occupiedCells.Count > 0)
@@ -1215,8 +1308,18 @@ public class GridScript : MonoBehaviour
             return;
         }
 
-        bool canPlacePreview = CanPlaceBuilding(previewX, previewZ, previewWidth, previewDepth);
-        if (canPlacePreview && previewRequiresFullRoadSide)
+        bool canPlacePreview;
+        if (previewHasExternalValidation)
+        {
+            canPlacePreview = previewExternalCanPlace;
+        }
+        else
+        {
+            Debug.Log("same");
+            canPlacePreview = CanPlaceBuilding(previewX, previewZ, previewWidth, previewDepth);
+        }
+
+        if (!previewHasExternalValidation && canPlacePreview && previewRequiresFullRoadSide)
         {
             canPlacePreview = HasAtLeastOneFullRoadSide(previewX, previewZ, previewWidth, previewDepth);
         }

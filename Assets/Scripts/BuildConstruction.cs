@@ -315,6 +315,7 @@ public class BuildConstruction : MonoBehaviour
         gridScript.SetPlacementPreview(internalGridX, internalGridY, width, depth, requiresFullRoadSide);
 
         bool canPlace = CanPlaceSelectedBuildingAt(gridScript, selectedType, internalGridX, internalGridY, width, depth);
+        gridScript.SetPlacementPreviewValidation(canPlace);
         ShowOrUpdateBuildingPreview(gridScript, selectedType, prefab, internalGridX, internalGridY, width, depth, canPlace);
     }
 
@@ -358,27 +359,9 @@ public class BuildConstruction : MonoBehaviour
             return false;
         }
 
-        if (!ResourceManager.instance.CanAfford(buildingCost))
+        if (!CanPlaceSelectedBuildingAt(gridScript, selectedType, internalGridX, internalGridY, width, depth))
         {
-            Debug.Log($"Cannot build {selectedType}. Required: {buildingCost}, Current money: {ResourceManager.instance.Money}");
-            return false;
-        }
-
-        if (!gridScript.CanPlaceBuilding(internalGridX, internalGridY, width, depth)) {
-            Debug.Log("Cannot build here. The area is occupied or out of bounds.");
-            return false;
-        }
-
-        if (selectedType != BuySystemManager.BuildingType.Road &&
-            !gridScript.HasAtLeastOneFullRoadSide(internalGridX, internalGridY, width, depth)) {
-            Debug.Log("Cannot build here. Non-road buildings need at least one full side touching roads.");
-            return false;
-        }
-
-        if (selectedType == BuySystemManager.BuildingType.Road &&
-            !CanPlaceRoadWithConnection(gridScript, internalGridX, internalGridY, width, depth))
-        {
-            Debug.Log("Cannot build here. Roads must connect to an existing road (except the first road).");
+            Debug.Log("Cannot build here. Placement validation failed.");
             return false;
         }
 
