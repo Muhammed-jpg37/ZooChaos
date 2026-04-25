@@ -49884,74 +49884,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 971894784}
   m_CullTransparentMesh: 1
---- !u!1001 &979760365
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 1323895294637454494, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_Name
-      value: Door (1)
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 176.25
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 4.09
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 90.4
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 0.7071068
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0.7071068
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: -90
-      objectReference: {fileID: 0}
-    - target: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 12e810da8062a12408377ed6f5f97bfd, type: 3}
 --- !u!1 &980767961
 GameObject:
   m_ObjectHideFlags: 0
@@ -94874,14 +94806,30 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   startingGridSize: 10
   gridSize: 10
+  gridWidth: 10
+  gridHeight: 10
+  coreGridSize: 10
+  coreOriginX: 0
+  coreOriginZ: 0
   cellSize: 5
   startingStartCorner: {x: 0, y: 0}
   startCorner: {x: 0, y: 0}
-  gridUpgradeCost: 100
-  gridUpgradeCostIncrease: 50
-  lockedExpansionSide: 0
+  chunkSize: 10
+  chunkPurchaseCost: 100
   groundPlane: {fileID: 123320295}
   groundPlaneBaseSize: 10
+  shaderPlanePrefab: {fileID: 4638128076307016847, guid: 34d28b8e86fafff41a3ccc072cd9ad8e,
+    type: 3}
+  shaderPlaneParent: {fileID: 3389517158822380813, guid: 34d28b8e86fafff41a3ccc072cd9ad8e,
+    type: 3}
+  expansionShaderPlanePrefab: {fileID: 2907557579583520624, guid: 8f7f676aface12f4b9d8df62b85f1800,
+    type: 3}
+  expansionShaderPlaneParent: {fileID: 6585258680943171009, guid: 8f7f676aface12f4b9d8df62b85f1800,
+    type: 3}
+  gridExpansionVisualPrefab: {fileID: 2907557579583520624, guid: 8f7f676aface12f4b9d8df62b85f1800,
+    type: 3}
+  gridExpansionVisualParent: {fileID: 6585258680943171009, guid: 8f7f676aface12f4b9d8df62b85f1800,
+    type: 3}
   exteriorWallPrefab: {fileID: 1094773209605363100, guid: 5dc2be49e08c3cd44aa600f1fc7472df,
     type: 3}
   exteriorWallParent: {fileID: 0}
@@ -94904,6 +94852,15 @@ MonoBehaviour:
   bottomRightCornerRotation: {x: 0, y: 90, z: 0}
   topLeftCornerRotation: {x: 0, y: -90, z: 0}
   topRightCornerRotation: {x: 0, y: 180, z: 0}
+  entryDoorPrefab: {fileID: 1323895294637454494, guid: 12e810da8062a12408377ed6f5f97bfd,
+    type: 3}
+  entryDoorParent: {fileID: 7243827356818639851, guid: 12e810da8062a12408377ed6f5f97bfd,
+    type: 3}
+  entryDoorOffset: {x: -40.12, y: 55.37, z: 0}
+  leftEntryDoorRotation: {x: 0, y: 90, z: 0}
+  rightEntryDoorRotation: {x: 0, y: -90, z: 0}
+  topEntryDoorRotation: {x: 0, y: 180, z: 0}
+  bottomEntryDoorRotation: {x: 0, y: 0, z: 0}
   cornerLightPrefab: {fileID: 3230042550420642741, guid: f7c928896d091ad42b80c582b491b081,
     type: 3}
   cornerLightParent: {fileID: 0}
@@ -94917,16 +94874,9 @@ MonoBehaviour:
   bottomRightCornerLightRotation: {x: -90, y: 0, z: 0}
   topLeftCornerLightRotation: {x: -90, y: 0, z: 0}
   topRightCornerLightRotation: {x: -90, y: 0, z: 0}
-  entryDoorPrefab: {fileID: 0}
-  entryAccessRoadPrefab: {fileID: 0}
-  entryParent: {fileID: 0}
-  entryY: 0
-  entryDoorOffset: {x: 0, y: 0, z: 0}
-  entryAccessOffset: {x: 0, y: 0, z: 0}
-  entryDoorRotation: {x: 0, y: 0, z: 0}
-  entryAccessRotation: {x: 0, y: 0, z: 0}
   hasEntryPoint: 0
-  entryRightSideRow: 0
+  entrySide: 4
+  entryIndex: 0
   gridColor: {r: 1, g: 0, b: 0, a: 0}
   occupiedCellColor: {r: 0.2, g: 0.45, b: 1, a: 0.35}
   validPreviewColor: {r: 0.2, g: 0.9, b: 0.3, a: 0.35}
@@ -123847,5 +123797,4 @@ SceneRoots:
   - {fileID: 901610264}
   - {fileID: 1536501239}
   - {fileID: 579167512}
-  - {fileID: 979760365}
   - {fileID: 4047212751653539008}

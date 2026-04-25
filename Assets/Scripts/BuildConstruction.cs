@@ -539,11 +539,6 @@ public class BuildConstruction : MonoBehaviour
             return false;
         }
 
-        if (selectedType == BuySystemManager.BuildingType.Road && !IsRoadFootprintOnEntryCell(gridScript, internalGridX, internalGridY, width, depth))
-        {
-            return false;
-        }
-
         if (!gridScript.CanPlaceBuilding(internalGridX, internalGridY, width, depth))
         {
             return false;

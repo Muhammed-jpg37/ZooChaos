@@ -57,6 +57,15 @@ public class GridScript : MonoBehaviour
     [SerializeField] private Vector3 topLeftCornerRotation = new Vector3(0f, -90f, 0f);
     [SerializeField] private Vector3 topRightCornerRotation = new Vector3(0f, 180f, 0f);
 
+    [Header("Entry Door")]
+    [SerializeField] private GameObject entryDoorPrefab;
+    [SerializeField] private Transform entryDoorParent;
+    [SerializeField] private Vector3 entryDoorOffset = Vector3.zero;
+    [SerializeField] private Vector3 leftEntryDoorRotation = new Vector3(0f, 90f, 0f);
+    [SerializeField] private Vector3 rightEntryDoorRotation = new Vector3(0f, -90f, 0f);
+    [SerializeField] private Vector3 topEntryDoorRotation = new Vector3(0f, 180f, 0f);
+    [SerializeField] private Vector3 bottomEntryDoorRotation = Vector3.zero;
+
     [Header("Corner Lights")]
     [SerializeField] private GameObject cornerLightPrefab;
     [SerializeField] private Transform cornerLightParent;
@@ -101,6 +110,7 @@ public class GridScript : MonoBehaviour
     private readonly List<GameObject> spawnedExteriorWalls = new List<GameObject>();
     private readonly List<GameObject> spawnedCornerLights = new List<GameObject>();
     private readonly List<GameObject> spawnedExpansionFrontierVisuals = new List<GameObject>();
+    private GameObject spawnedEntryDoor;
     private Transform runtimeWallsParent;
     
     private Transform runtimeCornerLightsParent;
@@ -118,6 +128,7 @@ public class GridScript : MonoBehaviour
             }
 
             grid.EnsurePerimeterVisuals();
+         
         }
     }
 
@@ -140,6 +151,7 @@ public class GridScript : MonoBehaviour
     private void OnDisable()
     {
         ClearExpansionFrontierVisuals();
+        ClearEntryDoor();
     }
 
     private void OnValidate()
@@ -189,6 +201,7 @@ public class GridScript : MonoBehaviour
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildEntryObjects();
         RebuildExpansionFrontierVisuals();
     }
 
@@ -571,6 +584,7 @@ public class GridScript : MonoBehaviour
         }
 
         hasEntryPoint = true;
+        LogSelectedEntryTileTransformDetails();
         EnsurePerimeterVisuals();
         return true;
     }
@@ -585,8 +599,24 @@ public class GridScript : MonoBehaviour
         entrySide = EntrySide.Right;
         entryIndex = Mathf.Clamp(oneBasedRow - 1, 0, CurrentGridHeight - 1);
         hasEntryPoint = true;
+        LogSelectedEntryTileTransformDetails();
         EnsurePerimeterVisuals();
         return true;
+    }
+
+    private void LogSelectedEntryTileTransformDetails()
+    {
+        if (!TryGetEntryBuildCell(out Vector2Int entryCell))
+        {
+            return;
+        }
+
+        Vector3 tileCenter = CellToWorldCenter(entryCell);
+        Vector3 doorSpawnPosition = GetEntryDoorWorldPosition(tileCenter);
+
+        Debug.Log(
+            $"[GridScript] Selected entry tile details | Side: {entrySide} | Index: {entryIndex} | GridCell: {entryCell} | " +
+            $"TileCenter(world): {tileCenter} | DoorSpawn(world): {doorSpawnPosition} | GridObject(world): {transform.position}");
     }
 
     public bool TryGetEntrySpawnPosition(out Vector3 worldPosition)
@@ -599,6 +629,30 @@ public class GridScript : MonoBehaviour
 
         int sideLength = (entrySide == EntrySide.Left || entrySide == EntrySide.Right) ? CurrentGridHeight : CurrentGridWidth;
         int clampedIndex = Mathf.Clamp(entryIndex, 0, sideLength - 1);
+        Vector2Int cell = GetEntryBuildCellInternal(clampedIndex);
+        Vector3 cellCenter = CellToWorldCenter(cell);
+        worldPosition = GetEntryDoorWorldPosition(cellCenter);
+        return true;
+    }
+
+    public bool TryGetEntryBuildCell(out Vector2Int cell)
+    {
+        cell = default;
+
+        if (!hasEntryPoint || CurrentGridWidth <= 0 || CurrentGridHeight <= 0)
+        {
+            return false;
+        }
+
+        int sideLength = (entrySide == EntrySide.Left || entrySide == EntrySide.Right) ? CurrentGridHeight : CurrentGridWidth;
+        int clampedIndex = Mathf.Clamp(entryIndex, 0, sideLength - 1);
+        cell = GetEntryBuildCellInternal(clampedIndex);
+
+        return true;
+    }
+
+    private Vector2Int GetEntryBuildCellInternal(int clampedIndex)
+    {
         Vector2Int cell = new Vector2Int(Mathf.Max(0, CurrentGridWidth - 1), clampedIndex);
 
         if (entrySide == EntrySide.Left)
@@ -614,37 +668,22 @@ public class GridScript : MonoBehaviour
             cell = new Vector2Int(clampedIndex, 0);
         }
 
-        worldPosition = CellToWorldCenter(cell);
-        return true;
+        return cell;
     }
 
-    public bool TryGetEntryBuildCell(out Vector2Int cell)
+    private Vector3 GetEntryDoorWorldPosition(Vector3 cellCenter)
     {
-        cell = default;
+        cellCenter.x += 10f * cellSize;
 
-        if (!hasEntryPoint || CurrentGridWidth <= 0 || CurrentGridHeight <= 0)
-        {
-            return false;
-        }
+        float localX = ((cellCenter.x - startCorner.x) / cellSize) - 0.5f;
+        float localZ = ((cellCenter.z - startCorner.y) / cellSize) - 0.5f;
 
-        int sideLength = (entrySide == EntrySide.Left || entrySide == EntrySide.Right) ? CurrentGridHeight : CurrentGridWidth;
-        int clampedIndex = Mathf.Clamp(entryIndex, 0, sideLength - 1);
-        cell = new Vector2Int(Mathf.Max(0, CurrentGridWidth - 1), clampedIndex);
+        int snappedCellX = Mathf.RoundToInt(localX);
+        int snappedCellZ = Mathf.RoundToInt(localZ);
 
-        if (entrySide == EntrySide.Left)
-        {
-            cell = new Vector2Int(0, clampedIndex);
-        }
-        else if (entrySide == EntrySide.Top)
-        {
-            cell = new Vector2Int(clampedIndex, Mathf.Max(0, CurrentGridHeight - 1));
-        }
-        else if (entrySide == EntrySide.Bottom)
-        {
-            cell = new Vector2Int(clampedIndex, 0);
-        }
-
-        return true;
+        cellCenter.x = startCorner.x + ((snappedCellX + 0.5f) * cellSize);
+        cellCenter.z = startCorner.y + ((snappedCellZ + 0.5f) * cellSize);
+        return cellCenter;
     }
 
     private bool IsChunkAvailable(EntrySide side)
@@ -772,6 +811,7 @@ public class GridScript : MonoBehaviour
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
+        RebuildEntryObjects();
         RebuildExpansionFrontierVisuals();
     }
 
@@ -1315,7 +1355,7 @@ public class GridScript : MonoBehaviour
         }
         else
         {
-            Debug.Log("same");
+         
             canPlacePreview = CanPlaceBuilding(previewX, previewZ, previewWidth, previewDepth);
         }
 
@@ -1356,6 +1396,56 @@ public class GridScript : MonoBehaviour
 
     private void RebuildEntryObjects()
     {
-        // Entry prefabs are no longer spawned here; the door is handled by the scene setup/UI.
+        ClearEntryDoor();
+
+        if (!hasEntryPoint || entryDoorPrefab == null)
+        {
+            return;
+        }
+
+        if (!TryGetEntryBuildCell(out Vector2Int entryCell))
+        {
+            return;
+        }
+
+        Quaternion rotation = Quaternion.identity;
+        switch (entrySide)
+        {
+            case EntrySide.Left:
+                rotation = Quaternion.Euler(leftEntryDoorRotation);
+                break;
+            case EntrySide.Right:
+                rotation = Quaternion.Euler(rightEntryDoorRotation);
+                break;
+            case EntrySide.Top:
+                rotation = Quaternion.Euler(topEntryDoorRotation);
+                break;
+            case EntrySide.Bottom:
+                rotation = Quaternion.Euler(bottomEntryDoorRotation);
+                break;
+        }
+
+        Vector3 spawnPosition = GetEntryDoorWorldPosition(CellToWorldCenter(entryCell));
+        Transform parent = entryDoorParent != null ? entryDoorParent : transform;
+        spawnedEntryDoor = Instantiate(entryDoorPrefab, spawnPosition, rotation, parent);
+    }
+
+    private void ClearEntryDoor()
+    {
+        if (spawnedEntryDoor == null)
+        {
+            return;
+        }
+
+        if (Application.isPlaying)
+        {
+            Destroy(spawnedEntryDoor);
+        }
+        else
+        {
+            DestroyImmediate(spawnedEntryDoor);
+        }
+
+        spawnedEntryDoor = null;
     }
 }
