@@ -26,6 +26,8 @@ public class GridScript : MonoBehaviour
     [SerializeField] private int chunkSize = 10;
     [SerializeField] private int chunkPurchaseCost = 100;
     [SerializeField] private Transform groundPlane;
+    [SerializeField] private GameObject gridVisualPlanePrefab;
+    [SerializeField] private Transform gridVisualPlaneParent;
     [SerializeField] private float groundPlaneBaseSize = 10f;
     [SerializeField] private GameObject shaderPlanePrefab;
     [SerializeField] private Transform shaderPlaneParent;
@@ -198,11 +200,25 @@ public class GridScript : MonoBehaviour
 
     public void EnsurePerimeterVisuals()
     {
+        EnsureGroundPlaneInstance();
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
         RebuildEntryObjects();
         RebuildExpansionFrontierVisuals();
+    }
+
+    private void EnsureGroundPlaneInstance()
+    {
+        if (groundPlane != null || gridVisualPlanePrefab == null)
+        {
+            return;
+        }
+
+        Transform parent = gridVisualPlaneParent != null ? gridVisualPlaneParent : transform;
+        GameObject plane = Instantiate(gridVisualPlanePrefab);
+        plane.transform.SetParent(parent, true);
+        groundPlane = plane.transform;
     }
 
     public bool HasEntryPointConfigured => hasEntryPoint;
@@ -673,7 +689,7 @@ public class GridScript : MonoBehaviour
 
     private Vector3 GetEntryDoorWorldPosition(Vector3 cellCenter)
     {
-        cellCenter.x += 10f * cellSize;
+        
 
         float localX = ((cellCenter.x - startCorner.x) / cellSize) - 0.5f;
         float localZ = ((cellCenter.z - startCorner.y) / cellSize) - 0.5f;
@@ -817,6 +833,8 @@ public class GridScript : MonoBehaviour
 
     private void UpdateGroundPlaneScale()
     {
+        EnsureGroundPlaneInstance();
+
         if (groundPlane == null)
         {
             return;
@@ -1423,17 +1441,25 @@ public class GridScript : MonoBehaviour
             case EntrySide.Bottom:
                 rotation = Quaternion.Euler(bottomEntryDoorRotation);
                 break;
+
         }
 
         Vector3 spawnPosition = GetEntryDoorWorldPosition(CellToWorldCenter(entryCell));
+        spawnedEntryDoor = Instantiate(entryDoorPrefab, spawnPosition, rotation);
+
         Transform parent = entryDoorParent != null ? entryDoorParent : transform;
-        spawnedEntryDoor = Instantiate(entryDoorPrefab, spawnPosition, rotation, parent);
+        if (parent != null)
+        {
+            // Keep world position/rotation so parent transforms do not offset the selected spawn point.
+            spawnedEntryDoor.transform.SetParent(parent, true);
+        }
     }
 
     private void ClearEntryDoor()
     {
         if (spawnedEntryDoor == null)
         {
+            Debug.Log("sa");
             return;
         }
 
