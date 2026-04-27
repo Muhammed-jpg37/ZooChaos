@@ -29,10 +29,10 @@ public class GridScript : MonoBehaviour
     [SerializeField] private GameObject gridVisualPlanePrefab;
     [SerializeField] private Transform gridVisualPlaneParent;
     [SerializeField] private float groundPlaneBaseSize = 10f;
-    [SerializeField] private GameObject shaderPlanePrefab;
-    [SerializeField] private Transform shaderPlaneParent;
-    [SerializeField] private GameObject expansionShaderPlanePrefab;
-    [SerializeField] private Transform expansionShaderPlaneParent;
+    [HideInInspector, SerializeField] private GameObject shaderPlanePrefab;
+    [HideInInspector, SerializeField] private Transform shaderPlaneParent;
+    [HideInInspector, SerializeField] private GameObject expansionShaderPlanePrefab;
+    [HideInInspector, SerializeField] private Transform expansionShaderPlaneParent;
     [SerializeField] private GameObject gridExpansionVisualPrefab;
     [SerializeField] private Transform gridExpansionVisualParent;
 
@@ -186,6 +186,7 @@ public class GridScript : MonoBehaviour
         }
 
         SyncLegacyGridSize();
+        MigrateLegacyVisualReferences();
 
         if (groundPlane != null)
         {
@@ -210,15 +211,69 @@ public class GridScript : MonoBehaviour
 
     private void EnsureGroundPlaneInstance()
     {
-        if (groundPlane != null || gridVisualPlanePrefab == null)
+        GameObject prefab = GetOwnedChunkVisualPrefab();
+        if (groundPlane != null || prefab == null)
         {
             return;
         }
 
-        Transform parent = gridVisualPlaneParent != null ? gridVisualPlaneParent : transform;
-        GameObject plane = Instantiate(gridVisualPlanePrefab);
+        Transform parent = GetOwnedChunkVisualParent();
+        GameObject plane = Instantiate(prefab);
         plane.transform.SetParent(parent, true);
         groundPlane = plane.transform;
+    }
+
+    private void MigrateLegacyVisualReferences()
+    {
+        if (gridVisualPlanePrefab == null && shaderPlanePrefab != null)
+        {
+            gridVisualPlanePrefab = shaderPlanePrefab;
+        }
+
+        if (gridVisualPlaneParent == null && shaderPlaneParent != null)
+        {
+            gridVisualPlaneParent = shaderPlaneParent;
+        }
+
+        if (gridExpansionVisualPrefab == null && expansionShaderPlanePrefab != null)
+        {
+            gridExpansionVisualPrefab = expansionShaderPlanePrefab;
+        }
+
+        if (gridExpansionVisualParent == null && expansionShaderPlaneParent != null)
+        {
+            gridExpansionVisualParent = expansionShaderPlaneParent;
+        }
+    }
+
+    private GameObject GetOwnedChunkVisualPrefab()
+    {
+        return gridVisualPlanePrefab != null ? gridVisualPlanePrefab : shaderPlanePrefab;
+    }
+
+    private Transform GetOwnedChunkVisualParent()
+    {
+        if (gridVisualPlaneParent != null)
+        {
+            return gridVisualPlaneParent;
+        }
+
+        return shaderPlaneParent != null ? shaderPlaneParent : transform;
+    }
+
+    private GameObject GetExpansionFrontierVisualPrefab()
+    {
+        return gridExpansionVisualPrefab != null ? gridExpansionVisualPrefab : expansionShaderPlanePrefab;
+    }
+
+    private Transform GetExpansionFrontierVisualParent()
+    {
+        if (gridExpansionVisualParent != null)
+        {
+            return gridExpansionVisualParent;
+        }
+
+        return expansionShaderPlaneParent != null ? expansionShaderPlaneParent : transform;
     }
 
     public bool HasEntryPointConfigured => hasEntryPoint;
@@ -275,6 +330,26 @@ public class GridScript : MonoBehaviour
         {
             previewX += deltaX;
             previewZ += deltaZ;
+        }
+    }
+
+    private void ShiftEntryIndexWithGrid(int deltaX, int deltaZ)
+    {
+        if (!hasEntryPoint || entrySide == EntrySide.None)
+        {
+            return;
+        }
+
+        switch (entrySide)
+        {
+            case EntrySide.Left:
+            case EntrySide.Right:
+                entryIndex += deltaZ;
+                break;
+            case EntrySide.Top:
+            case EntrySide.Bottom:
+                entryIndex += deltaX;
+                break;
         }
     }
 
@@ -405,12 +480,19 @@ public class GridScript : MonoBehaviour
         int deltaCellsX = (oldMinChunkX - minChunkX) * unit;
         int deltaCellsZ = (oldMinChunkZ - minChunkZ) * unit;
         ShiftGridCellData(deltaCellsX, deltaCellsZ);
+        ShiftEntryIndexWithGrid(deltaCellsX, deltaCellsZ);
 
         gridWidth = (maxChunkX - minChunkX + 1) * unit;
         gridHeight = (maxChunkZ - minChunkZ + 1) * unit;
         coreGridSize = unit;
         coreOriginX = -minChunkX * unit;
         coreOriginZ = -minChunkZ * unit;
+
+        if (hasEntryPoint)
+        {
+            int sideLength = (entrySide == EntrySide.Left || entrySide == EntrySide.Right) ? gridHeight : gridWidth;
+            entryIndex = Mathf.Clamp(entryIndex, 0, Mathf.Max(0, sideLength - 1));
+        }
 
         unlockedCells.Clear();
         foreach (Vector2Int chunk in purchasedChunkCoords)
@@ -487,9 +569,7 @@ public class GridScript : MonoBehaviour
             return;
         }
 
-        GameObject prefab = gridExpansionVisualPrefab != null
-            ? gridExpansionVisualPrefab
-            : (expansionShaderPlanePrefab != null ? expansionShaderPlanePrefab : shaderPlanePrefab);
+        GameObject prefab = GetExpansionFrontierVisualPrefab();
 
         if (prefab == null)
         {
@@ -497,9 +577,7 @@ public class GridScript : MonoBehaviour
         }
 
         float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
-        Transform parent = gridExpansionVisualParent != null
-            ? gridExpansionVisualParent
-            : (expansionShaderPlaneParent != null ? expansionShaderPlaneParent : shaderPlaneParent);
+        Transform parent = GetExpansionFrontierVisualParent();
 
         HashSet<Vector2Int> frontier = GetFrontierChunkCoords();
         foreach (Vector2Int candidate in frontier)
@@ -541,7 +619,7 @@ public class GridScript : MonoBehaviour
 
     private void SpawnShaderPlaneForChunkCoord(Vector2Int chunkCoord)
     {
-        GameObject prefabToSpawn = shaderPlanePrefab != null ? shaderPlanePrefab : expansionShaderPlanePrefab;
+        GameObject prefabToSpawn = GetOwnedChunkVisualPrefab();
         if (prefabToSpawn == null)
         {
             return;
@@ -552,7 +630,7 @@ public class GridScript : MonoBehaviour
         float centerZ = startingStartCorner.y + ((chunkCoord.y + 0.5f) * chunkWorld);
         Vector3 spawnPosition = new Vector3(centerX, 0f, centerZ);
 
-        Transform parent = shaderPlaneParent != null ? shaderPlaneParent : expansionShaderPlaneParent;
+        Transform parent = GetOwnedChunkVisualParent();
         GameObject shaderPlane = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, parent);
         shaderPlane.transform.localScale = new Vector3(chunkWorld / 10f, 1f, chunkWorld / 10f);
     }
@@ -761,51 +839,6 @@ public class GridScript : MonoBehaviour
         return TryPurchaseChunkAtCoord(target);
     }
 
-    private void SpawnShaderPlaneForChunk(EntrySide side)
-    {
-        GameObject prefabToSpawn = shaderPlanePrefab != null ? shaderPlanePrefab : expansionShaderPlanePrefab;
-        if (prefabToSpawn == null)
-        {
-            return;
-        }
-
-        float chunkWorldSize = Mathf.Max(1, chunkSize) * cellSize;
-        float coreWorldSize = Mathf.Max(1, coreGridSize) * cellSize;
-        float coreStartX = startCorner.x + (coreOriginX * cellSize);
-        float coreStartZ = startCorner.y + (coreOriginZ * cellSize);
-        float coreEndX = coreStartX + coreWorldSize;
-        float coreEndZ = coreStartZ + coreWorldSize;
-        float scaleX = chunkWorldSize;
-        float scaleZ = chunkWorldSize;
-        Vector3 spawnPosition = Vector3.zero;
-
-        switch (side)
-        {
-            case EntrySide.Left:
-                spawnPosition = new Vector3(coreStartX - (chunkWorldSize * 0.5f), 0f, coreStartZ + (coreWorldSize * 0.5f));
-                scaleZ = coreWorldSize;
-                break;
-            case EntrySide.Bottom:
-                spawnPosition = new Vector3(coreStartX + (coreWorldSize * 0.5f), 0f, coreStartZ - (chunkWorldSize * 0.5f));
-                scaleX = coreWorldSize;
-                break;
-            case EntrySide.Top:
-                spawnPosition = new Vector3(coreStartX + (coreWorldSize * 0.5f), 0f, coreEndZ + (chunkWorldSize * 0.5f));
-                scaleX = coreWorldSize;
-                break;
-            case EntrySide.Right:
-                spawnPosition = new Vector3(coreEndX + (chunkWorldSize * 0.5f), 0f, coreStartZ + (coreWorldSize * 0.5f));
-                scaleZ = coreWorldSize;
-                break;
-            default:
-                return;
-        }
-
-        Transform parent = shaderPlaneParent != null ? shaderPlaneParent : expansionShaderPlaneParent;
-        GameObject shaderPlane = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, parent);
-        shaderPlane.transform.localScale = new Vector3(scaleX / 10f, 1f, scaleZ / 10f);
-    }
-
     private void ResetToStartingGrid()
     {
         int initialSize = Mathf.Max(1, chunkSize);
@@ -880,8 +913,8 @@ public class GridScript : MonoBehaviour
             bool hasLeftNeighbor = IsCellUnlocked(cell.x - 1, cell.y);
             bool hasRightNeighbor = IsCellUnlocked(cell.x + 1, cell.y);
 
-            float wallX = startCorner.x + ((cell.x + anchorOffset) * cellSize);
-            float wallZ = startCorner.y + ((cell.y + anchorOffset) * cellSize);
+            float wallX = startCorner.x + ((cell.x + 0.5f + anchorOffset) * cellSize);
+            float wallZ = startCorner.y + ((cell.y + 0.5f + anchorOffset) * cellSize);
 
             if (!hasBottomNeighbor && !ShouldSkipEntryGap(cell, EntrySide.Bottom))
             {
