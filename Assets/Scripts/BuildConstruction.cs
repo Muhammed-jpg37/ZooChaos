@@ -385,6 +385,10 @@ public class BuildConstruction : MonoBehaviour
         {
             spawnRotation = GetRoadRotation(gridScript, internalGridX, internalGridY);
         }
+        else
+        {
+            spawnRotation = GetBuildingFacingRotation(gridScript, internalGridX, internalGridY, width, depth);
+        }
 
         GameObject spawnedBuilding = Instantiate(prefab, spawnPosition + buildSpawnOffset, spawnRotation);
 
@@ -397,11 +401,6 @@ public class BuildConstruction : MonoBehaviour
         buildingInstance.Initialize(selectedType, new Vector2Int(internalGridX, internalGridY), width, depth);
 
         PlayConstructionSmoke(spawnPosition);
-
-        if (selectedType == BuySystemManager.BuildingType.Road)
-        {
-            RefreshAllRoadRotations(gridScript);
-        }
 
         LastConstructedGridX = internalGridX + 1;
         LastConstructedGridY = internalGridY + 1;
@@ -586,6 +585,10 @@ public class BuildConstruction : MonoBehaviour
         {
             previewRotation = GetRoadRotation(gridScript, internalGridX, internalGridY);
         }
+        else
+        {
+            previewRotation = GetBuildingFacingRotation(gridScript, internalGridX, internalGridY, width, depth);
+        }
 
         previewInstance.transform.SetPositionAndRotation(previewPosition, previewRotation);
         SetPreviewColor(canPlace ? previewValidColor : previewInvalidColor);
@@ -690,6 +693,73 @@ public class BuildConstruction : MonoBehaviour
         return Quaternion.Euler(-90f, 0f, 90f);
     }
 
+    private Quaternion GetBuildingFacingRotation(GridScript gridScript, int gridX, int gridZ, int width, int depth)
+    {
+        if (gridScript == null)
+        {
+            return Quaternion.identity;
+        }
+
+        if (HasRoadOnTopEdge(gridScript, gridX, gridZ, width))
+        {
+            return Quaternion.identity;
+        }
+
+        if (HasRoadOnBottomEdge(gridScript, gridX, gridZ, width))
+        {
+            return Quaternion.Euler(0f, 180f, 0f);
+        }
+
+        if (HasRoadOnLeftEdge(gridScript, gridX, gridZ, depth))
+        {
+            return Quaternion.Euler(0f, 90f, 0f);
+        }
+
+        if (HasRoadOnRightEdge(gridScript, gridX, gridZ, depth))
+        {
+            return Quaternion.Euler(0f, -90f, 0f);
+        }
+
+        return Quaternion.identity;
+    }
+
+    private bool HasRoadOnTopEdge(GridScript gridScript, int gridX, int gridZ, int width)
+    {
+        return IsFullRoadEdge(gridScript, gridX, gridZ + 1, width, true);
+    }
+
+    private bool HasRoadOnBottomEdge(GridScript gridScript, int gridX, int gridZ, int width)
+    {
+        return IsFullRoadEdge(gridScript, gridX, gridZ - 1, width, true);
+    }
+
+    private bool HasRoadOnLeftEdge(GridScript gridScript, int gridX, int gridZ, int depth)
+    {
+        return IsFullRoadEdge(gridScript, gridX - 1, gridZ, depth, false);
+    }
+
+    private bool HasRoadOnRightEdge(GridScript gridScript, int gridX, int gridZ, int depth)
+    {
+        return IsFullRoadEdge(gridScript, gridX + 1, gridZ, depth, false);
+    }
+
+    private bool IsFullRoadEdge(GridScript gridScript, int startX, int startZ, int length, bool alongX)
+    {
+        for (int i = 0; i < length; i++)
+        {
+            int cellX = alongX ? startX + i : startX;
+            int cellZ = alongX ? startZ : startZ + i;
+            Vector2Int cell = new Vector2Int(cellX, cellZ);
+
+            if (!gridScript.IsWithinGrid(cell) || !gridScript.IsRoadCell(cell))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private bool CanPlaceRoadWithConnection(GridScript gridScript, int gridX, int gridZ, int width, int depth)
     {
         List<Vector2Int> roadCells = gridScript.GetRoadCells();
@@ -753,22 +823,6 @@ public class BuildConstruction : MonoBehaviour
         }
 
         return false;
-    }
-
-    private void RefreshAllRoadRotations(GridScript gridScript)
-    {
-        BuildingInstance[] allBuildings = FindObjectsOfType<BuildingInstance>();
-        for (int i = 0; i < allBuildings.Length; i++)
-        {
-            BuildingInstance building = allBuildings[i];
-            if (building == null || building.BuildingType != BuySystemManager.BuildingType.Road)
-            {
-                continue;
-            }
-
-            Vector2Int roadCell = building.GridOrigin;
-            building.transform.rotation = GetRoadRotation(gridScript, roadCell.x, roadCell.y);
-        }
     }
 
     private void OnDisable()

@@ -583,9 +583,9 @@ public class GridScript : MonoBehaviour
         foreach (Vector2Int candidate in frontier)
         {
             Vector3 center = new Vector3(
-                startingStartCorner.x + ((candidate.x + 0.5f) * chunkWorld),
+                startCorner.x + ((candidate.x - minChunkX + 0.5f) * chunkWorld),
                 0f,
-                startingStartCorner.y + ((candidate.y + 0.5f) * chunkWorld)
+                startCorner.y + ((candidate.y - minChunkZ + 0.5f) * chunkWorld)
             );
 
             GameObject visual = Instantiate(prefab, center, Quaternion.identity, parent);
@@ -626,8 +626,8 @@ public class GridScript : MonoBehaviour
         }
 
         float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
-        float centerX = startingStartCorner.x + ((chunkCoord.x + 0.5f) * chunkWorld);
-        float centerZ = startingStartCorner.y + ((chunkCoord.y + 0.5f) * chunkWorld);
+        float centerX = startCorner.x + ((chunkCoord.x - minChunkX + 0.5f) * chunkWorld);
+        float centerZ = startCorner.y + ((chunkCoord.y - minChunkZ + 0.5f) * chunkWorld);
         Vector3 spawnPosition = new Vector3(centerX, 0f, centerZ);
 
         Transform parent = GetOwnedChunkVisualParent();

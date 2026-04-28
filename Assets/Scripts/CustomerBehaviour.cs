@@ -597,13 +597,14 @@ public class CustomerBehaviour : MonoBehaviour
 	{
 		switch (type)
 		{
-			case BuySystemManager.BuildingType.Cage1:
-			case BuySystemManager.BuildingType.Cage2:
-			case BuySystemManager.BuildingType.Cage3:
+			case BuySystemManager.BuildingType.LionCage:
+			case BuySystemManager.BuildingType.MonkeyCage:
 				return cageBaseReward;
-			case BuySystemManager.BuildingType.FoodStall:
+			case BuySystemManager.BuildingType.SodaVendor:
+			case BuySystemManager.BuildingType.PopcornVendor:
+			case BuySystemManager.BuildingType.VendingMachine:
 				return foodStallBaseReward;
-			case BuySystemManager.BuildingType.WaterFountain:
+			case BuySystemManager.BuildingType.Decorations:
 				return waterFountainBaseReward;
 			case BuySystemManager.BuildingType.Road:
 				return roadBaseReward;

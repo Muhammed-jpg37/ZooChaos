@@ -31,7 +31,7 @@ public class BuySystemManager : MonoBehaviour
     [SerializeField] private List<BuildingEntry> buildingEntries = new List<BuildingEntry>();
 
     public BuildingType selectedBuilding { get; private set; } = BuildingType.None;
-    public enum BuildingType { None, Road, Cage1, Cage2, Cage3, FoodStall, WaterFountain }
+    public enum BuildingType { None, Road, LionCage, MonkeyCage,SodaVendor ,PopcornVendor,VendingMachine,StaffRoom ,Decorations }
 
     private readonly Dictionary<BuildingType, BuildingEntry> buildingLookup = new Dictionary<BuildingType, BuildingEntry>();
 
