@@ -61,12 +61,10 @@ public class GridScript : MonoBehaviour
 
     [Header("Entry Door")]
     [SerializeField] private GameObject entryDoorPrefab;
-    [SerializeField] private Transform entryDoorParent;
-    [SerializeField] private Vector3 entryDoorOffset = Vector3.zero;
-    [SerializeField] private Vector3 leftEntryDoorRotation = new Vector3(0f, 90f, 0f);
-    [SerializeField] private Vector3 rightEntryDoorRotation = new Vector3(0f, -90f, 0f);
-    [SerializeField] private Vector3 topEntryDoorRotation = new Vector3(0f, 180f, 0f);
-    [SerializeField] private Vector3 bottomEntryDoorRotation = Vector3.zero;
+    [SerializeField] private Vector3 entryDoorOffset = new Vector3(2.5f,3.5f,2.5f);
+    
+    [SerializeField] private Vector3 rightEntryDoorRotation = new Vector3(0f, 90f, 0f);
+    
 
     [Header("Corner Lights")]
     [SerializeField] private GameObject cornerLightPrefab;
@@ -153,7 +151,6 @@ public class GridScript : MonoBehaviour
     private void OnDisable()
     {
         ClearExpansionFrontierVisuals();
-        ClearEntryDoor();
     }
 
     private void OnValidate()
@@ -725,7 +722,7 @@ public class GridScript : MonoBehaviour
         int clampedIndex = Mathf.Clamp(entryIndex, 0, sideLength - 1);
         Vector2Int cell = GetEntryBuildCellInternal(clampedIndex);
         Vector3 cellCenter = CellToWorldCenter(cell);
-        worldPosition = GetEntryDoorWorldPosition(cellCenter);
+        worldPosition = GetEntryDoorWorldPosition(cellCenter) + entryDoorOffset;
         return true;
     }
 
@@ -1462,29 +1459,32 @@ public class GridScript : MonoBehaviour
         Quaternion rotation = Quaternion.identity;
         switch (entrySide)
         {
-            case EntrySide.Left:
-                rotation = Quaternion.Euler(leftEntryDoorRotation);
-                break;
+        
             case EntrySide.Right:
                 rotation = Quaternion.Euler(rightEntryDoorRotation);
                 break;
-            case EntrySide.Top:
-                rotation = Quaternion.Euler(topEntryDoorRotation);
-                break;
-            case EntrySide.Bottom:
-                rotation = Quaternion.Euler(bottomEntryDoorRotation);
-                break;
+           
 
         }
 
-        Vector3 spawnPosition = GetEntryDoorWorldPosition(CellToWorldCenter(entryCell));
+        Vector3 spawnPosition = GetEntryDoorWorldPosition(CellToWorldCenter(entryCell)) + entryDoorOffset;
         spawnedEntryDoor = Instantiate(entryDoorPrefab, spawnPosition, rotation);
 
-        Transform parent = entryDoorParent != null ? entryDoorParent : transform;
-        if (parent != null)
+        Transform doorSpawnPoint = FindEntryDoorSpawnPoint(spawnedEntryDoor.transform);
+        PlayerMovementController playerMovementController = FindObjectOfType<PlayerMovementController>();
+        if (playerMovementController != null)
         {
-            // Keep world position/rotation so parent transforms do not offset the selected spawn point.
-            spawnedEntryDoor.transform.SetParent(parent, true);
+            bool updatedFromTaggedEntryPoint = playerMovementController.RefreshStartPointFromEntryPointTag(true);
+            if (!updatedFromTaggedEntryPoint)
+            {
+                playerMovementController.SetStartPoint(doorSpawnPoint != null ? doorSpawnPoint.position : spawnPosition);
+                playerMovementController.ResetToStartPoint();
+            }
+        }
+
+        if (ResourceManager.instance != null)
+        {
+            ResourceManager.instance.SetCustomerSpawnPoint(doorSpawnPoint);
         }
     }
 
@@ -1506,5 +1506,57 @@ public class GridScript : MonoBehaviour
         }
 
         spawnedEntryDoor = null;
+
+        PlayerMovementController playerMovementController = FindObjectOfType<PlayerMovementController>();
+        if (playerMovementController != null)
+        {
+            playerMovementController.ClearStartPoint();
+        }
+
+        if (ResourceManager.instance != null)
+        {
+            ResourceManager.instance.SetCustomerSpawnPoint(null);
+        }
+    }
+
+    private Transform FindEntryDoorSpawnPoint(Transform doorRoot)
+    {
+        if (doorRoot == null)
+        {
+            return null;
+        }
+
+        Transform namedSpawnPoint = FindChildTransformRecursive(doorRoot, "EmptyObject");
+        if (namedSpawnPoint != null)
+        {
+            return namedSpawnPoint;
+        }
+
+        return doorRoot;
+    }
+
+    private Transform FindChildTransformRecursive(Transform root, string targetName)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        if (root.name == targetName)
+        {
+            return root;
+        }
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            Transform found = FindChildTransformRecursive(child, targetName);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 }

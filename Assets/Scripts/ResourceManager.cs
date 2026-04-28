@@ -165,6 +165,11 @@ public class ResourceManager : MonoBehaviour
 		}
 	}
 
+	public void SetCustomerSpawnPoint(Transform spawnPoint)
+	{
+		customerSpawnPoint = spawnPoint;
+	}
+
 	public void UnregisterCustomer(CustomerBehaviour customer)
 	{
 		if (customer != null)

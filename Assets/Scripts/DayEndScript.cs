@@ -138,6 +138,7 @@ public class DayEndScript : MonoBehaviour
 
         if (playerMovementController != null)
         {
+            playerMovementController.RefreshStartPointFromEntryPointTag(true);
             playerMovementController.SetMovementEnabled(true);
         }
 

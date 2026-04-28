@@ -4,14 +4,17 @@ using UnityEngine;
 
 public class PlayerMovementController : MonoBehaviour
 {
+    private const string EntryPointTag = "entryPoint";
+
     private Rigidbody rb;
     [SerializeField] private float moveSpeed = 8f;
-    [SerializeField] private Transform startPoint;
+    [SerializeField] private Vector3 startPoint;
     [SerializeField] private GameObject cameraStartPoint;
     [SerializeField] private GameObject secondCameraPoint;
     [SerializeField] private GameObject Camera;
 
     private Vector3 initialStartPosition;
+    private bool hasCustomStartPoint;
     private bool canMove = true;
 
     private int currentCameraIndex = 0;
@@ -40,6 +43,44 @@ public class PlayerMovementController : MonoBehaviour
 
         Camera.transform.position = cameraPoint.transform.position;
         Camera.transform.rotation = rotation;
+    }
+
+    public void SetStartPoint(Vector3 newStartPoint)
+    {
+        startPoint = newStartPoint;
+        hasCustomStartPoint = true;
+    }
+
+    public void ClearStartPoint()
+    {
+        hasCustomStartPoint = false;
+    }
+
+    public bool RefreshStartPointFromEntryPointTag(bool teleportToStartPoint)
+    {
+        GameObject entryPointObject;
+        try
+        {
+            entryPointObject = GameObject.FindGameObjectWithTag(EntryPointTag);
+        }
+        catch (UnityException)
+        {
+            return false;
+        }
+
+        if (entryPointObject == null)
+        {
+            return false;
+        }
+
+        SetStartPoint(entryPointObject.transform.position);
+
+        if (teleportToStartPoint)
+        {
+            ResetToStartPoint();
+        }
+
+        return true;
     }
 
     void Update()
@@ -82,7 +123,7 @@ public class PlayerMovementController : MonoBehaviour
 
     public void ResetToStartPoint()
     {
-        Vector3 targetPosition = startPoint != null ? startPoint.position : initialStartPosition;
+        Vector3 targetPosition = hasCustomStartPoint ? startPoint : initialStartPosition;
 
         if (rb != null)
         {
