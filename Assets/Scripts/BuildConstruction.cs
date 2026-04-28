@@ -392,6 +392,22 @@ public class BuildConstruction : MonoBehaviour
 
         GameObject spawnedBuilding = Instantiate(prefab, spawnPosition + buildSpawnOffset, spawnRotation);
 
+        // Re-center visual geometry so prefab pivot/mesh offset doesn't shift placement
+        Renderer[] childRenderers = spawnedBuilding.GetComponentsInChildren<Renderer>(true);
+        if (childRenderers != null && childRenderers.Length > 0)
+        {
+            Bounds combined = childRenderers[0].bounds;
+            for (int i = 1; i < childRenderers.Length; i++)
+            {
+                combined.Encapsulate(childRenderers[i].bounds);
+            }
+
+            Vector3 visualCenter = combined.center;
+            // Move the spawned root so the visual center aligns with desired spawn position
+            Vector3 desiredCenter = spawnPosition + buildSpawnOffset;
+            spawnedBuilding.transform.position += (desiredCenter - visualCenter);
+        }
+
         BuildingInstance buildingInstance = spawnedBuilding.GetComponent<BuildingInstance>();
         if (buildingInstance == null)
         {

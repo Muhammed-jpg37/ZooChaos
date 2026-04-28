@@ -718,6 +718,16 @@ public class GridScript : MonoBehaviour
             return false;
         }
 
+        if (spawnedEntryDoor != null)
+        {
+            Transform liveDoorSpawnPoint = FindEntryDoorSpawnPoint(spawnedEntryDoor.transform);
+            if (liveDoorSpawnPoint != null)
+            {
+                worldPosition = liveDoorSpawnPoint.position;
+                return true;
+            }
+        }
+
         int sideLength = (entrySide == EntrySide.Left || entrySide == EntrySide.Right) ? CurrentGridHeight : CurrentGridWidth;
         int clampedIndex = Mathf.Clamp(entryIndex, 0, sideLength - 1);
         Vector2Int cell = GetEntryBuildCellInternal(clampedIndex);
@@ -1471,20 +1481,18 @@ public class GridScript : MonoBehaviour
         spawnedEntryDoor = Instantiate(entryDoorPrefab, spawnPosition, rotation);
 
         Transform doorSpawnPoint = FindEntryDoorSpawnPoint(spawnedEntryDoor.transform);
+        Vector3 resolvedSpawnPosition = doorSpawnPoint != null ? doorSpawnPoint.position : spawnPosition;
+
         PlayerMovementController playerMovementController = FindObjectOfType<PlayerMovementController>();
         if (playerMovementController != null)
         {
-            bool updatedFromTaggedEntryPoint = playerMovementController.RefreshStartPointFromEntryPointTag(true);
-            if (!updatedFromTaggedEntryPoint)
-            {
-                playerMovementController.SetStartPoint(doorSpawnPoint != null ? doorSpawnPoint.position : spawnPosition);
-                playerMovementController.ResetToStartPoint();
-            }
+            playerMovementController.SetStartPoint(resolvedSpawnPosition);
+            playerMovementController.ResetToStartPoint();
         }
 
         if (ResourceManager.instance != null)
         {
-            ResourceManager.instance.SetCustomerSpawnPoint(doorSpawnPoint);
+            ResourceManager.instance.SetCustomerSpawnPoint(doorSpawnPoint != null ? doorSpawnPoint : spawnedEntryDoor.transform);
         }
     }
 
@@ -1526,23 +1534,39 @@ public class GridScript : MonoBehaviour
             return null;
         }
 
-        Transform namedSpawnPoint = FindChildTransformRecursive(doorRoot, "EmptyObject");
+        Transform taggedSpawnPoint = FindChildWithTagRecursive(doorRoot, "entryPoint");
+        if (taggedSpawnPoint != null)
+        {
+            return taggedSpawnPoint;
+        }
+
+        Transform namedSpawnPoint = FindChildTransformRecursive(doorRoot, "EmptyObject", true);
         if (namedSpawnPoint != null)
         {
             return namedSpawnPoint;
         }
 
+        Transform containsSpawnInName = FindChildByNameContainsRecursive(doorRoot, "spawn");
+        if (containsSpawnInName != null)
+        {
+            return containsSpawnInName;
+        }
+
         return doorRoot;
     }
 
-    private Transform FindChildTransformRecursive(Transform root, string targetName)
+    private Transform FindChildTransformRecursive(Transform root, string targetName, bool ignoreCase)
     {
         if (root == null)
         {
             return null;
         }
 
-        if (root.name == targetName)
+        bool isMatch = ignoreCase
+            ? string.Equals(root.name, targetName, System.StringComparison.OrdinalIgnoreCase)
+            : root.name == targetName;
+
+        if (isMatch)
         {
             return root;
         }
@@ -1550,7 +1574,65 @@ public class GridScript : MonoBehaviour
         for (int i = 0; i < root.childCount; i++)
         {
             Transform child = root.GetChild(i);
-            Transform found = FindChildTransformRecursive(child, targetName);
+            Transform found = FindChildTransformRecursive(child, targetName, ignoreCase);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private Transform FindChildByNameContainsRecursive(Transform root, string nameFragment)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrEmpty(root.name) &&
+            root.name.IndexOf(nameFragment, System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return root;
+        }
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            Transform found = FindChildByNameContainsRecursive(child, nameFragment);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private Transform FindChildWithTagRecursive(Transform root, string tagName)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (root.CompareTag(tagName))
+            {
+                return root;
+            }
+        }
+        catch (UnityException)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform child = root.GetChild(i);
+            Transform found = FindChildWithTagRecursive(child, tagName);
             if (found != null)
             {
                 return found;

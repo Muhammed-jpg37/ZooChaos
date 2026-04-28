@@ -57,6 +57,11 @@ public class DayEndScript : MonoBehaviour
         {
             SetBuildModeVisible(true);
 
+            if (playerMovementController != null)
+            {
+                playerMovementController.gameObject.SetActive(false);
+            }
+
             if (resourceManager != null)
             {
                 resourceManager.SetCustomerSpawningEnabled(false);
@@ -66,7 +71,24 @@ public class DayEndScript : MonoBehaviour
         }
         else
         {
-            BeginNewDay();
+            SetBuildModeVisible(true);
+
+            if (playerMovementController != null)
+            {
+                if (playerMovementController.gameObject.activeSelf)
+                {
+                    playerMovementController.gameObject.SetActive(false);
+                }
+
+                playerMovementController.SetMovementEnabled(false);
+            }
+
+            if (resourceManager != null)
+            {
+                resourceManager.SetCustomerSpawningEnabled(false);
+            }
+
+            UpdateClockUI();
         }
 
         if (dayCounterText != null)
@@ -90,10 +112,26 @@ public class DayEndScript : MonoBehaviour
 
                 if (playerMovementController != null)
                 {
-                    playerMovementController.SetMovementEnabled(true);
+                    if (gridScript.TryGetEntrySpawnPosition(out Vector3 entrySpawnPosition))
+                    {
+                        playerMovementController.SetStartPoint(entrySpawnPosition);
+                    }
+
+                    if (playerMovementController.gameObject.activeSelf)
+                    {
+                        playerMovementController.gameObject.SetActive(false);
+                    }
+
+                    playerMovementController.SetMovementEnabled(false);
                 }
 
-                BeginNewDay();
+                // Entry selected - enable build mode, don't start day yet
+                SetBuildModeVisible(true);
+
+                if (resourceManager != null)
+                {
+                    resourceManager.SetCustomerSpawningEnabled(false);
+                }
             }
 
             return;
@@ -138,7 +176,17 @@ public class DayEndScript : MonoBehaviour
 
         if (playerMovementController != null)
         {
-            playerMovementController.RefreshStartPointFromEntryPointTag(true);
+            if (!playerMovementController.gameObject.activeSelf)
+            {
+                playerMovementController.gameObject.SetActive(true);
+            }
+
+            if (gridScript != null && gridScript.TryGetEntrySpawnPosition(out Vector3 entrySpawnPosition))
+            {
+                playerMovementController.SetStartPoint(entrySpawnPosition);
+                playerMovementController.ResetToStartPoint();
+            }
+
             playerMovementController.SetMovementEnabled(true);
         }
 
@@ -168,6 +216,10 @@ public class DayEndScript : MonoBehaviour
         {
             playerMovementController.ResetToStartPoint();
             playerMovementController.SetMovementEnabled(false);
+            if (playerMovementController.gameObject.activeSelf)
+            {
+                playerMovementController.gameObject.SetActive(false);
+            }
         }
 
         dayNumber++;
@@ -185,10 +237,24 @@ public class DayEndScript : MonoBehaviour
         }
 
         SetBuildModeVisible(true);
+
+        if (playerMovementController != null)
+        {
+            playerMovementController.SetMovementEnabled(false);
+            if (playerMovementController.gameObject.activeSelf)
+            {
+                playerMovementController.gameObject.SetActive(false);
+            }
+        }
     }
 
     public void OnStartNextDayButtonPressed()
     {
+        if (waitingForEntrySelection)
+        {
+            return;
+        }
+
         BeginNewDay();
     }
 

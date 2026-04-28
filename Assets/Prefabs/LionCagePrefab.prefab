@@ -196,8 +196,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e81b84fba5f44f44abb082d1ba067d87, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  minNeedInterval: 12
-  maxNeedInterval: 30
+  minNeedInterval: 4
+  maxNeedInterval: 8
   activeNeedDuration: 30
   animalHappiness: 77.2
   currentNeed: 0
