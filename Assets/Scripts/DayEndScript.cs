@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
 
 public class DayEndScript : MonoBehaviour
 {
@@ -21,6 +22,7 @@ public class DayEndScript : MonoBehaviour
     [SerializeField] private TMP_Text finalBalanceText;
     [SerializeField] private TMP_Text dayTitleText;
     [SerializeField] private TMP_Text dayCounterText;
+    [SerializeField] private Button startNewDayButton;
 
     [Header("Map / Build Mode")]
     [SerializeField] private MapOpener mapOpener;
@@ -95,6 +97,8 @@ public class DayEndScript : MonoBehaviour
         {
             dayCounterText.text = $"Day {dayNumber}";
         }
+
+        UpdateStartNewDayButtonState();
     }
 
     private void Update()
@@ -132,6 +136,8 @@ public class DayEndScript : MonoBehaviour
                 {
                     resourceManager.SetCustomerSpawningEnabled(false);
                 }
+
+                UpdateStartNewDayButtonState();
             }
 
             return;
@@ -167,9 +173,16 @@ public class DayEndScript : MonoBehaviour
             resourceManager.SetCustomerSpawningEnabled(true);
         }
 
+        UpdateStartNewDayButtonState();
+
         if (dayEndPanel != null)
         {
             dayEndPanel.SetActive(false);
+        }
+
+        if (gridScript != null)
+        {
+            gridScript.SetExpansionFrontierVisible(false);
         }
 
         SetBuildModeVisible(false);
@@ -227,6 +240,8 @@ public class DayEndScript : MonoBehaviour
         {
             dayCounterText.text = $"Day {dayNumber}";
         }
+
+        UpdateStartNewDayButtonState();
     }
 
     public void OnDayEndContinueButtonPressed()
@@ -234,6 +249,11 @@ public class DayEndScript : MonoBehaviour
         if (dayEndPanel != null)
         {
             dayEndPanel.SetActive(false);
+        }
+
+        if (gridScript != null)
+        {
+            gridScript.SetExpansionFrontierVisible(true);
         }
 
         SetBuildModeVisible(true);
@@ -246,6 +266,8 @@ public class DayEndScript : MonoBehaviour
                 playerMovementController.gameObject.SetActive(false);
             }
         }
+
+        UpdateStartNewDayButtonState();
     }
 
     public void OnStartNextDayButtonPressed()
@@ -256,6 +278,18 @@ public class DayEndScript : MonoBehaviour
         }
 
         BeginNewDay();
+    }
+
+    private void UpdateStartNewDayButtonState()
+    {
+        if (startNewDayButton == null)
+        {
+            return;
+        }
+
+        // First day only: lock day start until the player chooses a door.
+        bool shouldLock = dayNumber == 1 && waitingForEntrySelection;
+        startNewDayButton.interactable = !shouldLock;
     }
 
     private void UpdateClockUI()

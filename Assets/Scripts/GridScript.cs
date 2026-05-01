@@ -29,6 +29,8 @@ public class GridScript : MonoBehaviour
     [SerializeField] private GameObject gridVisualPlanePrefab;
     [SerializeField] private Transform gridVisualPlaneParent;
     [SerializeField] private float groundPlaneBaseSize = 10f;
+    [SerializeField] private GameObject gridCellPlanePrefab;
+    [SerializeField] private Transform gridCellPlaneParent;
     [HideInInspector, SerializeField] private GameObject shaderPlanePrefab;
     [HideInInspector, SerializeField] private Transform shaderPlaneParent;
     [HideInInspector, SerializeField] private GameObject expansionShaderPlanePrefab;
@@ -109,11 +111,14 @@ public class GridScript : MonoBehaviour
     private bool previewExternalCanPlace;
     private readonly List<GameObject> spawnedExteriorWalls = new List<GameObject>();
     private readonly List<GameObject> spawnedCornerLights = new List<GameObject>();
+    private readonly Dictionary<Vector2Int, GameObject> spawnedCellVisuals = new Dictionary<Vector2Int, GameObject>();
     private readonly List<GameObject> spawnedExpansionFrontierVisuals = new List<GameObject>();
     private GameObject spawnedEntryDoor;
     private Transform runtimeWallsParent;
     
     private Transform runtimeCornerLightsParent;
+    private Transform runtimeCellVisualsParent;
+    private bool expansionFrontierVisible = true;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void BootstrapPerimeterVisualsAfterSceneLoad()
@@ -200,9 +205,23 @@ public class GridScript : MonoBehaviour
     {
         EnsureGroundPlaneInstance();
         UpdateGroundPlaneScale();
+        RebuildCellVisuals();
         RebuildExteriorWalls();
         RebuildCornerLights();
         RebuildEntryObjects();
+        RebuildExpansionFrontierVisuals();
+    }
+
+    public void SetExpansionFrontierVisible(bool isVisible)
+    {
+        expansionFrontierVisible = isVisible;
+
+        if (!isVisible)
+        {
+            ClearExpansionFrontierVisuals();
+            return;
+        }
+
         RebuildExpansionFrontierVisuals();
     }
 
@@ -271,6 +290,26 @@ public class GridScript : MonoBehaviour
         }
 
         return expansionShaderPlaneParent != null ? expansionShaderPlaneParent : transform;
+    }
+
+    private GameObject GetCellVisualPrefab()
+    {
+        if (gridCellPlanePrefab != null)
+        {
+            return gridCellPlanePrefab;
+        }
+
+        if (gridVisualPlanePrefab != null)
+        {
+            return gridVisualPlanePrefab;
+        }
+
+        return shaderPlanePrefab;
+    }
+
+    private Transform GetCellVisualParent()
+    {
+        return ResolveSpawnParent(null, ref runtimeCellVisualsParent, "CellVisuals_Runtime");
     }
 
     public bool HasEntryPointConfigured => hasEntryPoint;
@@ -526,12 +565,12 @@ public class GridScript : MonoBehaviour
 
         purchasedChunkCoords.Add(chunkCoord);
         RebuildGridFromPurchasedChunks();
+        RebuildCellVisuals();
         UpdateGroundPlaneScale();
         RebuildExteriorWalls();
         RebuildCornerLights();
         RebuildExpansionFrontierVisuals();
         RebuildEntryObjects();
-        SpawnShaderPlaneForChunkCoord(chunkCoord);
         return true;
     }
 
@@ -561,7 +600,7 @@ public class GridScript : MonoBehaviour
     {
         ClearExpansionFrontierVisuals();
 
-        if (!hasEntryPoint)
+        if (!hasEntryPoint || !expansionFrontierVisible)
         {
             return;
         }
@@ -612,24 +651,6 @@ public class GridScript : MonoBehaviour
         }
 
         spawnedExpansionFrontierVisuals.Clear();
-    }
-
-    private void SpawnShaderPlaneForChunkCoord(Vector2Int chunkCoord)
-    {
-        GameObject prefabToSpawn = GetOwnedChunkVisualPrefab();
-        if (prefabToSpawn == null)
-        {
-            return;
-        }
-
-        float chunkWorld = Mathf.Max(1, chunkSize) * cellSize;
-        float centerX = startCorner.x + ((chunkCoord.x - minChunkX + 0.5f) * chunkWorld);
-        float centerZ = startCorner.y + ((chunkCoord.y - minChunkZ + 0.5f) * chunkWorld);
-        Vector3 spawnPosition = new Vector3(centerX, 0f, centerZ);
-
-        Transform parent = GetOwnedChunkVisualParent();
-        GameObject shaderPlane = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, parent);
-        shaderPlane.transform.localScale = new Vector3(chunkWorld / 10f, 1f, chunkWorld / 10f);
     }
 
     public bool SetEntryOnCell(int gridX, int gridZ)
@@ -1155,8 +1176,94 @@ public class GridScript : MonoBehaviour
                 {
                     roadCells.Remove(cell);
                 }
+
+                RemoveCellVisualAt(cell);
             }
         }
+    }
+
+    private void RebuildCellVisuals()
+    {
+        ClearCellVisuals();
+
+        GameObject prefab = GetCellVisualPrefab();
+        if (prefab == null)
+        {
+            return;
+        }
+
+        Transform parent = GetCellVisualParent();
+        float planeScale = Mathf.Max(0.01f, cellSize) / 10f;
+
+        for (int x = 0; x < CurrentGridWidth; x++)
+        {
+            for (int z = 0; z < CurrentGridHeight; z++)
+            {
+                Vector2Int cell = new Vector2Int(x, z);
+                if (!IsCellUnlocked(x, z) || occupiedCells.Contains(cell))
+                {
+                    continue;
+                }
+
+                SpawnCellVisualAt(cell, prefab, parent, planeScale);
+            }
+        }
+    }
+
+    private void SpawnCellVisualAt(Vector2Int cell, GameObject prefab, Transform parent, float planeScale)
+    {
+        if (spawnedCellVisuals.ContainsKey(cell))
+        {
+            RemoveCellVisualAt(cell);
+        }
+
+        Vector3 center = CellToWorldCenter(cell);
+        GameObject cellVisual = Instantiate(prefab, center, Quaternion.identity, parent);
+        Vector3 currentScale = cellVisual.transform.localScale;
+        cellVisual.transform.localScale = new Vector3(planeScale, currentScale.y, planeScale);
+        spawnedCellVisuals[cell] = cellVisual;
+    }
+
+    private void RemoveCellVisualAt(Vector2Int cell)
+    {
+        if (!spawnedCellVisuals.TryGetValue(cell, out GameObject cellVisual) || cellVisual == null)
+        {
+            spawnedCellVisuals.Remove(cell);
+            return;
+        }
+
+        if (Application.isPlaying)
+        {
+            Destroy(cellVisual);
+        }
+        else
+        {
+            DestroyImmediate(cellVisual);
+        }
+
+        spawnedCellVisuals.Remove(cell);
+    }
+
+    private void ClearCellVisuals()
+    {
+        foreach (GameObject cellVisual in spawnedCellVisuals.Values)
+        {
+            if (cellVisual == null)
+            {
+                continue;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(cellVisual);
+            }
+            else
+            {
+                DestroyImmediate(cellVisual);
+            }
+        }
+
+        spawnedCellVisuals.Clear();
     }
 
     public List<Vector2Int> GetRoadCells()

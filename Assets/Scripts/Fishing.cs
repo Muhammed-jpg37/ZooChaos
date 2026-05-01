@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine.Events;
 using UnityEngine;
 using UnityEngine.UI;
@@ -37,12 +38,38 @@ public class Fishing : MonoBehaviour
     [SerializeField] private UnityEvent onFoodEscaped;
     [SerializeField] private bool disableOnFinish = true;
 
+    [Header("Feedback")]
+    [SerializeField] private ParticleSystem splashPrefab;
+    [SerializeField] private ParticleSystem overlapPrefab;
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip reelLoopClip;
+    [SerializeField] private AudioClip overlapClip;
+    [SerializeField] private AudioClip successClip;
+    [SerializeField] private AudioClip failClip;
+    [SerializeField] private float progressPulseScale = 1.12f;
+    [SerializeField] private float progressPulseDuration = 0.12f;
+    [SerializeField] private float progressPulseMaxScale = 1.5f;
+    [SerializeField] private Image redSegmentImage;
+    [SerializeField] private Image yellowSegmentImage;
+    [SerializeField] private Image greenSegmentImage;
+    [SerializeField] private float barBounceScale = 1.08f;
+    [SerializeField] private float barBounceDuration = 0.14f;
+    [SerializeField] private Color overlapGlowColor = new Color(1f, 0.9f, 0.45f, 1f);
+
     private float barVelocity;
     private float targetVelocity;
     private float directionChangeTimer;
     private float progress;
     private float elapsedTime;
     private bool isRunning;
+    // feedback runtime
+    private float previousProgress;
+    private bool wasOverlapping;
+    private Image controlBarImage;
+    private Image targetFoodImage;
+    private Coroutine progressPulseCoroutine;
+    private Coroutine barBounceCoroutine;
+    private Vector3 progressSliderBaseScale;
 
     private void OnEnable()
     {
@@ -84,6 +111,29 @@ public class Fishing : MonoBehaviour
         directionChangeTimer = Random.Range(minDirectionChangeTime, maxDirectionChangeTime);
         elapsedTime = 0f;
 
+        // feedback init
+        previousProgress = progress;
+        wasOverlapping = false;
+        if (controlBar != null)
+            controlBarImage = controlBar.GetComponent<Image>();
+        if (targetFood != null)
+            targetFoodImage = targetFood.GetComponent<Image>();
+
+        if (progressSlider != null)
+        {
+            progressSliderBaseScale = progressSlider.transform.localScale;
+        }
+
+        if (audioSource != null && reelLoopClip != null)
+        {
+            audioSource.loop = false;
+        }
+
+        // ensure segment images are configured for filled vertical behavior
+        ConfigureSegmentImage(redSegmentImage);
+        ConfigureSegmentImage(yellowSegmentImage);
+        ConfigureSegmentImage(greenSegmentImage);
+
         SetAnchoredY(controlBar, 0f);
         float targetLimit = GetMovementLimit(targetFood);
         float startSpread = Mathf.Min(targetLimit, controlBar.rect.height * 0.75f);
@@ -115,6 +165,7 @@ public class Fishing : MonoBehaviour
             if (barVelocity < 0f)
             {
                 barVelocity = -barVelocity * bottomBounceFactor;
+                StartBarBounce();
             }
         }
         else if (nextY >= limit)
@@ -123,6 +174,7 @@ public class Fishing : MonoBehaviour
             if (barVelocity > 0f)
             {
                 barVelocity = 0f;
+                StartBarBounce();
             }
         }
 
@@ -138,6 +190,15 @@ public class Fishing : MonoBehaviour
             float randomSpeed = Random.Range(minTargetSpeed, maxTargetSpeed);
             targetVelocity = randomDirection * randomSpeed;
             directionChangeTimer = Random.Range(minDirectionChangeTime, maxDirectionChangeTime);
+
+            // ripple on direction change
+            if (splashPrefab != null && targetFood != null)
+            {
+                ParticleSystem ps = Instantiate(splashPrefab, targetFood);
+                ps.transform.localPosition = Vector3.zero;
+                ps.Play();
+                Destroy(ps.gameObject, ps.main.duration + ps.main.startLifetime.constantMax);
+            }
         }
 
         float limit = GetMovementLimit(targetFood);
@@ -164,6 +225,22 @@ public class Fishing : MonoBehaviour
         if (IsOverlapping(controlBar, targetFood))
         {
             progress += progressGainPerSecond * dt;
+            if (!wasOverlapping)
+            {
+                // enter overlap: play SFX and particles
+                if (audioSource != null && overlapClip != null)
+                {
+                    audioSource.PlayOneShot(overlapClip);
+                }
+
+                if (overlapPrefab != null && targetFood != null)
+                {
+                    ParticleSystem ps = Instantiate(overlapPrefab, targetFood);
+                    ps.transform.localPosition = Vector3.zero;
+                    ps.Play();
+                    Destroy(ps.gameObject, ps.main.duration + ps.main.startLifetime.constantMax);
+                }
+            }
         }
         else if (elapsedTime >= startGraceDuration)
         {
@@ -179,12 +256,50 @@ public class Fishing : MonoBehaviour
 
         if (progress >= winProgress)
         {
+            if (audioSource != null && successClip != null) audioSource.PlayOneShot(successClip);
             FinishGame(true);
         }
         else if (progress <= loseProgress)
         {
+            if (audioSource != null && failClip != null) audioSource.PlayOneShot(failClip);
             FinishGame(false);
         }
+
+        // pulse on progress increase
+        if (progress > previousProgress)
+        {
+            StartProgressPulse();
+        }
+        previousProgress = progress;
+        wasOverlapping = IsOverlapping(controlBar, targetFood);
+
+        // update the 3-color segments to reflect current progress
+        UpdateProgressColorSegments();
+    }
+
+    private void UpdateProgressColorSegments()
+    {
+        if (progressSlider == null) return;
+        float max = progressSlider.maxValue > 0f ? progressSlider.maxValue : 100f;
+        float p = Mathf.Clamp(progress, 0f, max);
+
+        // ranges defined in same units as slider max (0..max). We'll treat them as absolute 0-100 if slider max is 100.
+        // Use standard ranges: 0-40 red, 40-80 yellow, 80-100 green
+        float redMax = 40f * (max / 100f);
+        float yellowMax = 80f * (max / 100f);
+        float greenMax = max; // 100%
+
+        float redFill = redMax > 0f ? Mathf.Clamp01(p / redMax) : 0f;
+        float yellowFill = 0f;
+        if (p > redMax)
+            yellowFill = Mathf.Clamp01((p - redMax) / (yellowMax - redMax));
+        float greenFill = 0f;
+        if (p > yellowMax)
+            greenFill = Mathf.Clamp01((p - yellowMax) / (greenMax - yellowMax));
+
+        if (redSegmentImage != null) redSegmentImage.fillAmount = redFill;
+        if (yellowSegmentImage != null) yellowSegmentImage.fillAmount = yellowFill;
+        if (greenSegmentImage != null) greenSegmentImage.fillAmount = greenFill;
     }
 
     private void FinishGame(bool success)
@@ -220,6 +335,71 @@ public class Fishing : MonoBehaviour
         }
     }
 
+    private void StartProgressPulse()
+    {
+        if (progressSlider == null) return;
+        if (progressPulseCoroutine != null) StopCoroutine(progressPulseCoroutine);
+        float scaleFactor = progressPulseScale;
+        if (progressPulseMaxScale > 0f)
+        {
+            scaleFactor = Mathf.Min(progressPulseScale, progressPulseMaxScale);
+        }
+        progressPulseCoroutine = StartCoroutine(ProgressPulseRoutine(progressSlider.transform, scaleFactor));
+    }
+
+    private IEnumerator ProgressPulseRoutine(Transform t, float scaleFactor)
+    {
+        Vector3 original = progressSliderBaseScale == Vector3.zero ? t.localScale : progressSliderBaseScale;
+        Vector3 target = original * scaleFactor;
+        float half = progressPulseDuration * 0.5f;
+        float timer = 0f;
+        while (timer < half)
+        {
+            timer += Time.unscaledDeltaTime;
+            t.localScale = Vector3.Lerp(original, target, timer / half);
+            yield return null;
+        }
+        timer = 0f;
+        while (timer < half)
+        {
+            timer += Time.unscaledDeltaTime;
+            t.localScale = Vector3.Lerp(target, original, timer / half);
+            yield return null;
+        }
+        t.localScale = original;
+        progressPulseCoroutine = null;
+    }
+
+    private void StartBarBounce()
+    {
+        if (controlBar == null) return;
+        if (barBounceCoroutine != null) StopCoroutine(barBounceCoroutine);
+        barBounceCoroutine = StartCoroutine(BarBounceRoutine(controlBar));
+    }
+
+    private IEnumerator BarBounceRoutine(RectTransform rect)
+    {
+        Vector3 orig = rect.localScale;
+        Vector3 peak = orig * barBounceScale;
+        float half = barBounceDuration * 0.5f;
+        float t = 0f;
+        while (t < half)
+        {
+            t += Time.unscaledDeltaTime;
+            rect.localScale = Vector3.Lerp(orig, peak, t / half);
+            yield return null;
+        }
+        t = 0f;
+        while (t < half)
+        {
+            t += Time.unscaledDeltaTime;
+            rect.localScale = Vector3.Lerp(peak, orig, t / half);
+            yield return null;
+        }
+        rect.localScale = orig;
+        barBounceCoroutine = null;
+    }
+
     private float GetMovementLimit(RectTransform element)
     {
         float areaHeight = playArea.rect.height;
@@ -244,5 +424,15 @@ public class Fishing : MonoBehaviour
         float bMax = b.anchoredPosition.y + bHalf;
 
         return aMax >= bMin && bMax >= aMin;
+    }
+
+    private void ConfigureSegmentImage(Image img)
+    {
+        if (img == null) return;
+        img.type = Image.Type.Filled;
+        img.fillMethod = Image.FillMethod.Vertical;
+        img.fillOrigin = 0; // bottom
+        img.fillClockwise = false;
+        img.fillAmount = 0f;
     }
 }
